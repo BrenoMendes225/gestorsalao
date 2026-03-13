@@ -339,28 +339,37 @@ const Navigation = ({
             )}
 
             {type === 'service' && (
-              <div className="space-y-4">
-                <input 
-                  placeholder="Nome do serviço" 
-                  value={newService.name}
-                  onChange={e => setNewService({...newService, name: e.target.value})}
-                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                />
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Nome do Serviço</label>
+                  <input 
+                    placeholder="ex: Designer de Sobrancelhas" 
+                    value={newService.name}
+                    onChange={e => setNewService({...newService, name: e.target.value})}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white shadow-inner font-bold"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input 
-                    placeholder="Preço (R$)" 
-                    type="number"
-                    value={newService.price}
-                    onChange={e => setNewService({...newService, price: e.target.value})}
-                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                  />
-                  <input 
-                    placeholder="Duração (min)" 
-                    type="number"
-                    value={newService.duration}
-                    onChange={e => setNewService({...newService, duration: e.target.value})}
-                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
-                  />
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Valor (R$)</label>
+                    <input 
+                      placeholder="0,00" 
+                      type="number"
+                      value={newService.price}
+                      onChange={e => setNewService({...newService, price: e.target.value})}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white shadow-inner font-bold"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Tempo (min)</label>
+                    <input 
+                      placeholder="60" 
+                      type="number"
+                      value={newService.duration}
+                      onChange={e => setNewService({...newService, duration: e.target.value})}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white shadow-inner font-bold"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1134,33 +1143,33 @@ const Services = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, 
           <input 
             type="text" 
             placeholder="Buscar por serviço ou preço..." 
-            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark rounded-xl border border-primary/10 dark:border-border-dark focus:ring-2 focus:ring-primary/20 outline-none text-sm dark:text-white"
+            className="w-full h-12 pl-12 pr-4 bg-white dark:bg-surface-dark rounded-xl border border-primary/10 dark:border-border-dark focus:ring-2 focus:ring-primary/20 outline-none text-sm dark:text-white" 
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-6">
-          <h3 className="text-lg font-bold md:col-span-full dark:text-white">{category} <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-2">({services.filter(s => s.category === category).length} serviços)</span></h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-6 pb-20">
+          <h3 className="text-lg font-bold md:col-span-full dark:text-white ml-2">{category} <span className="text-sm font-normal text-slate-500 dark:text-slate-400 ml-2">({services.filter(s => s.category === category).length} serviços)</span></h3>
           {services.filter(s => s.category === category).map(service => (
-            <div key={service.id} className="bg-white dark:bg-surface-dark p-5 rounded-xl border border-primary/5 dark:border-border-dark shadow-sm transition-transform hover:-translate-y-1 hover:shadow-md flex items-center gap-4 transition-colors">
-              <div className="h-16 w-16 md:h-20 md:w-20 rounded-lg bg-primary/5 dark:bg-background-dark overflow-hidden flex items-center justify-center shrink-0">
+            <div key={service.id} className="group bg-white dark:bg-surface-dark p-6 rounded-[32px] border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-xl hover:-translate-y-1 flex items-center gap-5">
+              <div className="h-20 w-20 rounded-2xl bg-slate-50 dark:bg-background-dark overflow-hidden flex items-center justify-center shrink-0 border border-slate-100 dark:border-border-dark group-hover:scale-105 transition-transform shadow-inner">
                 {service.image_url ? (
                   <img src={service.image_url} alt={service.name} className="object-cover w-full h-full" referrerPolicy="no-referrer" />
                 ) : (
-                  <Scissors className="text-primary" size={24} />
+                  <Scissors className="text-primary opacity-30 group-hover:opacity-100 transition-opacity" size={28} />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-base md:text-lg truncate dark:text-white">{service.name}</h4>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="flex items-center text-xs md:text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-background-dark px-2 py-1 rounded-md">
-                    <Clock size={14} className="mr-1" /> {service.duration} min
-                  </span>
-                  <span className="text-primary font-bold text-sm md:text-md">R$ {service.price.toFixed(2)}</span>
+                <p className="font-extrabold text-slate-900 dark:text-white text-lg leading-tight mb-1 group-hover:text-primary transition-colors">{service.name}</p>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-background-dark text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{service.duration} min</span>
+                  <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700"></span>
+                  <span className="text-xs font-bold text-slate-400 dark:text-slate-500">Principal</span>
                 </div>
               </div>
-              <button className="p-2 md:p-3 text-slate-300 dark:text-slate-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors">
-                <Settings size={20} />
-              </button>
+              <div className="text-right shrink-0">
+                <p className="text-xl font-black text-primary tracking-tighter">R$ {service.price?.toFixed(2)}</p>
+                <button className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase mt-1 group-hover:text-primary transition-colors">Editar</button>
+              </div>
             </div>
           ))}
         </div>
@@ -1654,39 +1663,45 @@ const Onboarding = ({ onComplete, isDarkMode }: { onComplete: () => void, isDark
           <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Serviços</h1>
           <p className="text-slate-500 dark:text-slate-400 mb-10 leading-relaxed">Para começar com o pé direito, adicione seus 3 principais serviços.</p>
           
-          <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar pr-1">
+          <div className="space-y-6 flex-1 overflow-y-auto no-scrollbar pr-1">
             {initialServices.map((service, idx) => (
-              <div key={idx} className="p-4 bg-slate-50 dark:bg-background-dark rounded-2xl border border-slate-100 dark:border-border-dark flex flex-col gap-3 transition-colors">
-                <input 
-                  type="text" 
-                  placeholder="Nome do serviço" 
-                  className="bg-transparent font-bold text-slate-700 dark:text-white outline-none border-b border-slate-200 dark:border-slate-800 pb-1 focus:border-primary transition-all"
-                  value={service.name}
-                  onChange={e => {
-                    const newS = [...initialServices];
-                    newS[idx].name = e.target.value;
-                    setInitialServices(newS);
-                  }}
-                />
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Preço (R$)</label>
-                    <input 
-                      type="number" 
-                      className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-xl px-3 py-2 text-sm outline-none focus:border-primary dark:text-white transition-all"
-                      value={service.price}
-                      onChange={e => {
-                        const newS = [...initialServices];
-                        newS[idx].price = e.target.value;
-                        setInitialServices(newS);
-                      }}
-                    />
+              <div key={idx} className="p-6 bg-slate-50 dark:bg-background-dark/50 rounded-3xl border border-slate-100 dark:border-border-dark flex flex-col gap-4 transition-all hover:bg-white dark:hover:bg-background-dark group shadow-sm">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 ml-1">Nome do serviço</label>
+                  <input 
+                    type="text" 
+                    placeholder="ex: Corte & Escova" 
+                    className="w-full bg-transparent font-extrabold text-xl text-slate-800 dark:text-white outline-none border-b-2 border-slate-100 dark:border-slate-800 pb-2 focus:border-primary transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700"
+                    value={service.name}
+                    onChange={e => {
+                      const newS = [...initialServices];
+                      newS[idx].name = e.target.value;
+                      setInitialServices(newS);
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 ml-1">Preço (R$)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-600 font-bold text-sm">R$</span>
+                      <input 
+                        type="number" 
+                        className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-2xl pl-9 pr-4 py-3 text-sm font-bold outline-none focus:border-primary dark:text-white transition-all shadow-sm"
+                        value={service.price}
+                        onChange={e => {
+                          const newS = [...initialServices];
+                          newS[idx].price = e.target.value;
+                          setInitialServices(newS);
+                        }}
+                      />
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Duração (min)</label>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 ml-1">Duração (min)</label>
                     <input 
                       type="number" 
-                      className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-xl px-3 py-2 text-sm outline-none focus:border-primary dark:text-white transition-all"
+                      className="w-full bg-white dark:bg-surface-dark border border-slate-100 dark:border-border-dark rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-primary dark:text-white transition-all shadow-sm"
                       value={service.duration}
                       onChange={e => {
                         const newS = [...initialServices];
