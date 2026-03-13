@@ -1870,7 +1870,7 @@ function App() {
         setActiveTab={setActiveTab} 
         onNewRecord={() => {
           setModalType('appointment');
-          setModalShowTabs(true);
+          setModalShowTabs(false);
           setIsModalOpen(true);
         }}
         isDarkMode={isDarkMode}
