@@ -32,6 +32,24 @@ export interface Appointment {
 
 export interface DashboardStats {
   revenue: number;
+  expenses: number;
   appointmentsToday: number;
   totalClients: number;
+}
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  date: string;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  read: boolean;
+  created_at: string;
 }

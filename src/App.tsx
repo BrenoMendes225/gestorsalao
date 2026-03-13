@@ -24,10 +24,16 @@ import {
   Camera,
   LogOut,
   Moon,
-  Sun
+  Sun,
+  Wallet,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Download,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Client, Service, Appointment, DashboardStats } from './types';
+import { Client, Service, Appointment, DashboardStats, Expense, Notification as AppNotification } from './types';
 import { supabase } from './lib/supabase';
 import { User } from '@supabase/supabase-js';
 
@@ -49,6 +55,7 @@ const Navigation = ({
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
+    { id: 'finances', label: 'Finanças', icon: Wallet },
     { id: 'services', label: 'Serviços', icon: Scissors },
     { id: 'clients', label: 'Clientes', icon: Users },
     { id: 'settings', label: 'Ajustes', icon: Settings },
@@ -57,18 +64,37 @@ const Navigation = ({
   return (
     <>
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-border-dark px-6 pb-6 pt-3 flex justify-between items-center z-50 transition-colors">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
-          >
-            <tab.icon size={24} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
-            <span className="text-[10px] font-bold uppercase tracking-wider">{tab.label}</span>
-          </button>
-        ))}
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-surface-dark border-t border-slate-200 dark:border-border-dark px-2 pb-6 pt-3 flex items-center z-50 transition-colors">
+        <div className="flex-1 flex justify-around">
+          {tabs.slice(0, 3).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+              <tab.icon size={20} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
+              <span className="text-[9px] font-bold uppercase tracking-tighter opacity-80">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+        
+        {/* Placeholder for the FAB */}
+        <div className="w-16 h-10 flex-shrink-0"></div>
+
+        <div className="flex-1 flex justify-around">
+          {tabs.slice(3).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center gap-1 transition-colors ${activeTab === tab.id ? 'text-primary' : 'text-slate-400 dark:text-slate-500'}`}
+            >
+              <tab.icon size={20} fill={activeTab === tab.id ? 'currentColor' : 'none'} />
+              <span className="text-[9px] font-bold uppercase tracking-tighter opacity-80">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-50">
           <button 
             onClick={onNewRecord}
             className="bg-primary text-white h-14 w-14 rounded-full flex items-center justify-center shadow-lg shadow-primary/40 hover:scale-105 transition-transform"
@@ -339,11 +365,10 @@ const Navigation = ({
               </div>
             )}
           </div>
-
           <button 
             onClick={handleSave}
             disabled={loading}
-            className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-8 disabled:opacity-50 hover:bg-primary/90 transition-all"
+            className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-8 disabled:opacity-50 hover:bg-primary/90 transition-all font-display"
           >
             {loading ? 'Salvando...' : 'Confirmar e Salvar'}
           </button>
@@ -353,9 +378,330 @@ const Navigation = ({
   );
 };
 
+const ReceiptModal = ({ 
+  isOpen, 
+  onClose, 
+  appointment, 
+  isDarkMode,
+  salonName
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  appointment: Appointment | null,
+  isDarkMode: boolean,
+  salonName: string
+}) => {
+  if (!appointment) return null;
+
+  const formatDate = (dateStr: string) => {
+    try {
+      const [year, month, day] = dateStr.split('-');
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formattedDate = formatDate(appointment.date);
+
+  const handleShare = async () => {
+    const text = `🌸 Confirmação de Atendimento – ${salonName}\n\n` +
+                 `Olá, ${appointment.client_name} ! Tudo bem? 😊\n` +
+                 `Seu atendimento foi registrado com sucesso.\n\n` +
+                 `💅 Serviço realizado: ${appointment.service_name}\n` +
+                 `📅 Data: ${formattedDate}\n` +
+                 `💰 Valor: R$ ${appointment.price?.toFixed(2)}\n\n` +
+                 `Agradecemos pela confiança no nosso trabalho.\n` +
+                 `Será sempre um prazer cuidar da sua beleza! ✨\n\n` +
+                 `💖 ${salonName}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Recibo - Beleza & Gestão',
+          text: text,
+        });
+      } catch (err) {
+        console.log('Erro ao compartilhar:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(text);
+      alert('Recibo copiado para a área de transferência!');
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            className="relative bg-white dark:bg-surface-dark w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl transition-colors"
+          >
+            {/* Receipt Content */}
+            <div className="p-8 relative">
+              {/* Watermark */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] dark:opacity-[0.07] pointer-events-none rotate-[-30deg]">
+                <Scissors size={200} className="text-primary" />
+              </div>
+
+              <div className="text-center mb-8 relative">
+                <div className="inline-flex p-3 rounded-2xl bg-primary/10 text-primary mb-4">
+                  <Scissors size={32} />
+                </div>
+                <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">Comprovante</h2>
+                <p className="text-slate-400 dark:text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Beleza & Gestão</p>
+              </div>
+
+              <div className="space-y-6 relative border-t border-dashed border-slate-200 dark:border-slate-800 pt-6">
+                <div className="bg-slate-50 dark:bg-background-dark p-6 rounded-3xl text-center mb-6">
+                  <p className="text-slate-800 dark:text-white font-medium">
+                    Olá, <span className="font-bold">{appointment.client_name}</span>! Tudo bem? 😊
+                  </p>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Seu atendimento foi registrado com sucesso.</p>
+                </div>
+                
+                <div className="flex justify-between items-end">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Serviço</label>
+                    <p className="text-base font-bold text-slate-700 dark:text-slate-300">{appointment.service_name}</p>
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{appointment.date} • {appointment.time}</p>
+                  </div>
+                  <div className="text-right">
+                    <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Valor</label>
+                    <p className="text-xl font-black text-primary">R$ {appointment.price?.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <div className="bg-primary/5 dark:bg-primary/10 p-6 rounded-3xl text-center border border-primary/10">
+                  <p className="text-slate-600 dark:text-slate-300 text-sm font-medium leading-relaxed">
+                    Agradecemos pela confiança no nosso trabalho.<br/>
+                    Será sempre um prazer cuidar da sua beleza! ✨
+                  </p>
+                  <p className="text-primary font-black mt-4 uppercase tracking-tighter">💖 {salonName}</p>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-3 relative">
+                <button 
+                  onClick={onClose}
+                  className="flex-1 h-12 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Fechar
+                </button>
+                <button 
+                  onClick={handleShare}
+                  className="flex-1 h-12 rounded-xl bg-primary text-white font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Share2 size={18} /> Compartilhar
+                </button>
+              </div>
+            </div>
+            
+            {/* Decorative bottom */}
+            <div className="h-2 bg-gradient-to-r from-primary to-rose-500"></div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+const NotificationOverlay = ({ 
+  isOpen, 
+  onClose, 
+  notifications,
+  onMarkRead 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  notifications: AppNotification[],
+  onMarkRead: (id: string) => void
+}) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={onClose}></div>
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="absolute top-16 right-4 w-80 bg-white dark:bg-surface-dark rounded-2xl shadow-2xl border border-slate-100 dark:border-border-dark z-50 overflow-hidden"
+          >
+            <div className="p-4 border-b border-slate-50 dark:border-border-dark flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 dark:text-white">Notificações</h3>
+              <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                {notifications.filter(n => !n.read).length} Novas
+              </span>
+            </div>
+            <div className="max-h-96 overflow-y-auto no-scrollbar">
+              {notifications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Bell className="mx-auto text-slate-200 dark:text-slate-700 mb-2" size={32} />
+                  <p className="text-slate-400 dark:text-slate-500 text-sm">Tudo limpo por aqui!</p>
+                </div>
+              ) : (
+                notifications.map(n => (
+                  <div 
+                    key={n.id} 
+                    onClick={() => onMarkRead(n.id)}
+                    className={`p-4 border-b border-slate-50 dark:border-border-dark cursor-pointer transition-colors ${!n.read ? 'bg-primary/5 dark:bg-primary/10' : 'hover:bg-slate-50 dark:hover:bg-background-dark'}`}
+                  >
+                    <div className="flex gap-3">
+                      <div className={`size-2 rounded-full mt-2 shrink-0 ${!n.read ? 'bg-primary' : 'bg-transparent'}`}></div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 dark:text-white leading-tight">{n.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{n.message}</p>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-2">Agora mesmo</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <button className="w-full p-3 text-xs font-bold text-primary hover:bg-slate-50 dark:hover:bg-background-dark transition-colors border-t border-slate-50 dark:border-border-dark">
+              Ver todas as notificações
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
+const FinanceScreen = ({ user, isDarkMode, onOpenAddExpense }: { user: User, isDarkMode: boolean, onOpenAddExpense: () => void }) => {
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [revenue, setRevenue] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    // Fetch Expenses
+    const { data: expData } = await supabase
+      .from('expenses')
+      .select('*')
+      .order('date', { ascending: false });
+    if (expData) setExpenses(expData);
+
+    // Fetch Revenue
+    const { data: confirmedApts } = await supabase
+      .from('appointments')
+      .select('service:service_id(price)')
+      .eq('status', 'confirmed');
+    
+    const rev = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
+    setRevenue(rev);
+    
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const totalExpenses = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+
+  return (
+    <div className="pb-24 p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">Finanças</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Controle seus gastos e lucros</p>
+        </div>
+        <button 
+          onClick={onOpenAddExpense}
+          className="size-14 rounded-2xl bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+        >
+          <Plus size={24} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-8 rounded-[32px] bg-white dark:bg-surface-dark shadow-xl border border-slate-50 dark:border-border-dark flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-[0.05] dark:opacity-[0.1] transition-transform group-hover:scale-110">
+            <TrendingUp size={120} className="text-emerald-500" />
+          </div>
+          <div>
+            <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-6">
+              <TrendingUp size={24} />
+            </div>
+            <p className="text-slate-400 dark:text-slate-500 font-bold text-xs uppercase tracking-widest">Total Ganhos</p>
+            <h3 className="text-4xl font-black text-slate-900 dark:text-white mt-1">R$ {revenue.toFixed(2)}</h3>
+          </div>
+        </div>
+
+        <div className="p-8 rounded-[32px] bg-white dark:bg-surface-dark shadow-xl border border-slate-50 dark:border-border-dark flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-8 opacity-[0.05] dark:opacity-[0.1] transition-transform group-hover:scale-110">
+            <Wallet size={120} className="text-rose-500" />
+          </div>
+          <div>
+            <div className="size-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-6">
+              <Wallet size={24} />
+            </div>
+            <p className="text-slate-400 dark:text-slate-500 font-bold text-xs uppercase tracking-widest">Total Despesas</p>
+            <h3 className="text-4xl font-black text-slate-900 dark:text-white mt-1">R$ {totalExpenses.toFixed(2)}</h3>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-8 rounded-[32px] bg-white dark:bg-surface-dark shadow-xl border border-slate-50 dark:border-border-dark">
+        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Últimas Despesas</h4>
+        <div className="space-y-4">
+          {loading ? (
+            <div className="py-12 text-center text-slate-400">Carregando despesas...</div>
+          ) : expenses.length === 0 ? (
+            <div className="py-12 text-center">
+              <div className="size-20 rounded-full bg-slate-50 dark:bg-background-dark flex items-center justify-center mx-auto mb-4">
+                <Wallet className="text-slate-200 dark:text-slate-700" size={32} />
+              </div>
+              <p className="text-slate-400 dark:text-slate-500 text-sm italic">Nenhuma despesa registrada ainda.</p>
+            </div>
+          ) : (
+            expenses.map(exp => (
+              <div key={exp.id} className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-background-dark transition-colors group">
+                <div className="flex items-center gap-4">
+                  <div className="size-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-white">{exp.description}</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 font-medium uppercase tracking-tighter">{exp.category} • {exp.date}</p>
+                  </div>
+                </div>
+                <p className="font-black text-rose-500">- R$ {exp.amount.toFixed(2)}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Screens ---
 
-const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
+const Dashboard = ({ 
+  user, 
+  isDarkMode, 
+  onSelectApt, 
+  onOpenNotifications, 
+  unreadCount 
+}: { 
+  user: User, 
+  isDarkMode: boolean, 
+  onSelectApt: (apt: Appointment) => void,
+  onOpenNotifications: () => void,
+  unreadCount: number
+}) => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profile, setProfile] = useState<any>(null);
@@ -366,7 +712,7 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      // Fetch Stats
+      // Fetch Revenue (Confirmed Appointments)
       const { data: confirmedApts } = await supabase
         .from('appointments')
         .select('service:service_id(price)')
@@ -374,12 +720,20 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
       
       const revenue = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
       
+      // Fetch Expenses
+      const { data: expData } = await supabase
+        .from('expenses')
+        .select('amount');
+      
+      const expenses = expData?.reduce((acc, exp) => acc + exp.amount, 0) || 0;
+
       const today = new Date().toISOString().split('T')[0];
       const { data: aptsToday } = await supabase.from('appointments').select('*').eq('date', today);
       const { data: totalCl } = await supabase.from('clients').select('*');
 
       setStats({
         revenue,
+        expenses,
         appointmentsToday: aptsToday?.length || 0,
         totalClients: totalCl?.length || 0
       });
@@ -408,6 +762,8 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
     fetchData();
   }, [user.id]);
 
+  const netProfit = (stats?.revenue || 0) - (stats?.expenses || 0);
+
   return (
     <div className="pb-24">
       {/* Top Bar */}
@@ -427,9 +783,14 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
         </div>
         <div className="flex items-center gap-2">
           <button className="p-2 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-700 dark:text-white"><Search size={20} /></button>
-          <button className="p-2 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-700 dark:text-white relative">
+          <button 
+            onClick={onOpenNotifications}
+            className="p-2 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-700 dark:text-white relative transition-all active:scale-90"
+          >
             <Bell size={20} />
-            <span className="absolute top-2 right-2 size-2 bg-primary rounded-full"></span>
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 size-2 bg-primary rounded-full animate-pulse"></span>
+            )}
           </button>
         </div>
       </div>
@@ -437,20 +798,19 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
       {/* Stats Grid */}
       <div className="p-4 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
         {[
-          { label: 'Faturamento', value: `R$ ${stats?.revenue.toFixed(2) || '0.00'}`, icon: TrendingUp, trend: '+12.5%' },
-          { label: 'Agendados', value: `${stats?.appointmentsToday} Serviços`, icon: Calendar, trend: '+4 novos' },
-          { label: 'Clientes Ativos', value: stats?.totalClients, icon: Users, trend: '+28 este mês' },
-          { label: 'Ticket Médio', value: `R$ ${((stats?.revenue || 0) / (stats?.appointmentsToday || 1)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: BarChart3, trend: '+5.2%' },
+          { label: 'Lucro Líquido', value: `R$ ${netProfit.toFixed(2)}`, icon: Wallet, trend: 'Net', isPrimary: true },
+          { label: 'Faturamento', value: `R$ ${stats?.revenue.toFixed(2) || '0.00'}`, icon: TrendingUp, trend: 'Bruto' },
+          { label: 'Hoje na Agenda', value: `${stats?.appointmentsToday} Serviços`, icon: Calendar, trend: 'Próximos' },
+          { label: 'Clientes Ativos', value: stats?.totalClients, icon: Users, trend: 'Base total' },
         ].map((item, i) => (
-          <div key={i} className="bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-slate-100 dark:border-border-dark transition-all hover:-translate-y-1">
-            <div className="flex items-center gap-2 text-primary mb-1">
+          <div key={i} className={`p-5 rounded-xl shadow-sm border transition-all hover:-translate-y-1 ${item.isPrimary ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-white dark:bg-surface-dark border-slate-100 dark:border-border-dark'}`}>
+            <div className={`flex items-center gap-2 mb-1 ${item.isPrimary ? 'text-white/80' : 'text-primary'}`}>
               <item.icon size={18} />
-              <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">{item.label}</p>
+              <p className={`text-sm font-medium ${item.isPrimary ? 'text-white/80' : 'text-slate-600 dark:text-slate-400'}`}>{item.label}</p>
             </div>
-            <h3 className="text-xl md:text-2xl font-extrabold text-slate-900 dark:text-white leading-none whitespace-nowrap">{item.value}</h3>
+            <h3 className={`text-xl md:text-2xl font-extrabold leading-none truncate ${item.isPrimary ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{item.value}</h3>
             <div className="flex items-center gap-1 mt-1">
-              <TrendingUp size={12} className="text-emerald-500" />
-              <p className="text-emerald-500 text-[10px] font-bold">{item.trend}</p>
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${item.isPrimary ? 'text-white/60' : 'text-slate-400 dark:text-slate-500'}`}>{item.trend}</p>
             </div>
           </div>
         ))}
@@ -486,22 +846,31 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
       </div>
       <div className="px-4 md:px-8 space-y-3 md:space-y-4 mb-8">
         {appointments.slice(0, 3).map((apt) => (
-          <div key={apt.id} className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
+          <div 
+            key={apt.id} 
+            onClick={() => onSelectApt(apt)}
+            className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md cursor-pointer group active:scale-[0.98]"
+          >
             <div className="flex items-center md:flex-col md:justify-center min-w-[50px] md:border-r border-slate-100 dark:border-border-dark md:pr-4 gap-4 md:gap-0">
-              <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg">{apt.time}</p>
+              <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg group-hover:text-primary transition-colors">{apt.time}</p>
               <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase hidden md:block">Hoje</p>
             </div>
             <div className="flex-1 border-t border-slate-50 dark:border-border-dark pt-3 md:border-0 md:pt-0">
-              <p className="text-slate-900 dark:text-white font-bold text-sm md:text-base">{apt.service_name}</p>
+              <p className="text-slate-900 dark:text-white font-bold text-sm md:text-base group-hover:text-primary transition-colors">{apt.service_name}</p>
               <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">{apt.client_name} • {apt.professional_name}</p>
             </div>
-            <div className="flex justify-between items-center md:flex-col md:items-end mt-2 md:mt-0">
-              <p className="text-primary font-bold text-sm md:text-base">R$ {apt.price}</p>
-              <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
-                apt.status === 'confirmed' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
-              }`}>
-                {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
-              </span>
+            <div className="flex justify-between items-center md:flex-col md:items-end mt-2 md:mt-0 gap-2">
+              <p className="text-primary font-black text-sm md:text-base">R$ {apt.price?.toFixed(2)}</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-3 py-1 rounded-full ${
+                  apt.status === 'confirmed' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                }`}>
+                  {apt.status === 'confirmed' ? 'Confirmado' : 'Pendente'}
+                </span>
+                <div className="size-8 rounded-lg bg-slate-50 dark:bg-background-dark flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
+                  <FileText size={16} />
+                </div>
+              </div>
             </div>
           </div>
         ))}
@@ -512,13 +881,11 @@ const Dashboard = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) =>
 
 const SettingsScreen = ({ 
   user, 
-  onUpdate, 
   isDarkMode, 
   toggleDarkMode 
 }: { 
   user: User, 
-  onUpdate: () => void,
-  isDarkMode: boolean,
+  isDarkMode: boolean, 
   toggleDarkMode: () => void
 }) => {
   const [profile, setProfile] = useState<any>(null);
@@ -555,7 +922,6 @@ const SettingsScreen = ({
       
       const { data: updatedProfile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(updatedProfile);
-      onUpdate();
       alert('Foto de perfil atualizada!');
     } catch (error: any) {
       alert(error.message);
@@ -639,7 +1005,7 @@ const SettingsScreen = ({
   );
 };
 
-const Agenda = ({ isDarkMode }: { isDarkMode: boolean }) => {
+const Agenda = ({ user, isDarkMode }: { user: User, isDarkMode: boolean }) => {
   const [filter, setFilter] = useState('Confirmados');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const tabs = ['Pendentes', 'Confirmados', 'Cancelados'];
@@ -719,7 +1085,7 @@ const Agenda = ({ isDarkMode }: { isDarkMode: boolean }) => {
   );
 };
 
-const Services = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolean }) => {
+const Services = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, isDarkMode: boolean }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [category, setCategory] = useState('Cabelo');
   const categories = ['Cabelo', 'Unhas', 'Estética', 'Maquiagem'];
@@ -803,7 +1169,7 @@ const Services = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolea
   );
 };
 
-const Clients = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolean }) => {
+const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, isDarkMode: boolean }) => {
   const [clients, setClients] = useState<Client[]>([]);
 
   useEffect(() => {
@@ -879,7 +1245,7 @@ const Clients = ({ onAdd, isDarkMode }: { onAdd: () => void, isDarkMode: boolean
   );
 };
 
-const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
+const Onboarding = ({ onComplete, isDarkMode }: { onComplete: () => void, isDarkMode: boolean }) => {
   const [step, setStep] = useState(0); // 0-2: Slides, 3: Auth-Choice, 4: Login, 5: Register, 6: Personal, 7: Salon, 8: Hours, 9: Services
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1345,19 +1711,34 @@ const Onboarding = ({ onComplete }: { onComplete: () => void }) => {
   }
 };
 
-export default function App() {
+function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<'appointment' | 'client' | 'service'>('appointment');
-  const [modalShowTabs, setModalShowTabs] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('theme') === 'dark' || 
-           (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark' || 
+             (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+    return false;
   });
+  const [salonName, setSalonName] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Modals & Overlays State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<'appointment' | 'client' | 'service' | 'expense'>('appointment');
+  const [modalShowTabs, setModalShowTabs] = useState(true);
+  const [selectedReceipt, setSelectedReceipt] = useState<Appointment | null>(null);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  // Expense specific states
+  const [expenseDesc, setExpenseDesc] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('Aluguel');
 
   useEffect(() => {
     if (isDarkMode) {
@@ -1371,20 +1752,12 @@ export default function App() {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
-  const openModal = (type: 'appointment' | 'client' | 'service' = 'appointment', showTabs: boolean = true) => {
-    setModalType(type);
-    setModalShowTabs(showTabs);
-    setIsModalOpen(true);
-  };
-
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -1396,70 +1769,228 @@ export default function App() {
     if (user) {
       supabase
         .from('profiles')
-        .select('onboarding_completed')
+        .select('onboarding_completed, salon_name')
         .eq('id', user.id)
         .single()
-        .then(({ data }) => setOnboardingCompleted(data?.onboarding_completed ?? false));
+        .then(({ data }) => {
+          setOnboardingCompleted(data?.onboarding_completed ?? false);
+          setSalonName(data?.salon_name || 'Beleza & Gestão');
+        });
+      
+      // Fetch notifications
+      const fetchNotifs = async () => {
+        const { data } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (data) setNotifications(data);
+      };
+      fetchNotifs();
     } else {
       setOnboardingCompleted(null);
     }
-  }, [user, refreshKey]);
+  }, [user]);
 
-  const refreshData = () => setRefreshKey(prev => prev + 1);
+  const markNotificationRead = async (id: string) => {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', id);
+    if (!error) {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    }
+  };
+
+  const handleOpenReceipt = (apt: Appointment) => {
+    setSelectedReceipt(apt);
+    setIsReceiptOpen(true);
+  };
+
+  const openAddExpense = () => {
+    setModalType('expense');
+    setModalShowTabs(false);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveExpense = async () => {
+    if (!user) return;
+    const { error } = await supabase.from('expenses').insert({
+      user_id: user.id,
+      description: expenseDesc,
+      amount: parseFloat(expenseAmount),
+      category: expenseCategory,
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    if (!error) {
+      setIsModalOpen(false);
+      setExpenseDesc('');
+      setExpenseAmount('');
+      setRefreshKey(prev => prev + 1);
+    } else {
+      alert(error.message);
+    }
+  };
 
   if (loading || (user && onboardingCompleted === null)) {
     return (
-      <div className="min-h-screen bg-background-light flex items-center justify-center">
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center transition-colors">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  if (!user || !onboardingCompleted) {
-    return <Onboarding onComplete={() => setOnboardingCompleted(true)} />;
+  if (!user) {
+    return <Onboarding onComplete={() => setOnboardingCompleted(true)} isDarkMode={isDarkMode} />;
+  }
+
+  if (!onboardingCompleted) {
+    return <Onboarding onComplete={() => setOnboardingCompleted(true)} isDarkMode={isDarkMode} />;
   }
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark font-sans antialiased md:flex transition-colors duration-300">
-      {/* Navigation Component - Handles both mobile and desktop (sidebar) views inside */}
+    <div className={`min-h-screen ${isDarkMode ? 'dark bg-background-dark' : 'bg-background-light'} transition-colors font-sans overflow-x-hidden selection:bg-primary/20`}>
       <Navigation 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
-        onNewRecord={() => openModal('appointment')} 
+        onNewRecord={() => {
+          setModalType('appointment');
+          setModalShowTabs(true);
+          setIsModalOpen(true);
+        }}
         isDarkMode={isDarkMode}
         toggleDarkMode={toggleDarkMode}
       />
-      
-      {/* Main Content Area - Left margin on desktop to leave space for fixed sidebar */}
-      <main className="md:ml-64 flex-1 transition-all duration-300 relative min-h-screen overflow-x-hidden">
+
+      <main className="md:ml-64 pb-24 transition-all duration-300">
         <div className="max-w-7xl mx-auto md:p-8">
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${activeTab}-${refreshKey}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+              key={activeTab}
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -10 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
             >
-              {activeTab === 'dashboard' && <Dashboard user={user} isDarkMode={isDarkMode} />}
-              {activeTab === 'agenda' && <Agenda isDarkMode={isDarkMode} />}
-              {activeTab === 'services' && <Services onAdd={() => openModal('service', false)} isDarkMode={isDarkMode} />}
-              {activeTab === 'clients' && <Clients onAdd={() => openModal('client', false)} isDarkMode={isDarkMode} />}
-              {activeTab === 'settings' && <SettingsScreen user={user} onUpdate={refreshData} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />}
+              {activeTab === 'dashboard' && (
+              <div key={`dash-${refreshKey}`}>
+                <Dashboard 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  onSelectApt={handleOpenReceipt}
+                  onOpenNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  unreadCount={notifications.filter(n => !n.read).length}
+                />
+              </div>
+              )}
+              {activeTab === 'agenda' && <Agenda user={user} isDarkMode={isDarkMode} />}
+              {activeTab === 'finances' && (
+              <div key={`fin-${refreshKey}`}>
+                <FinanceScreen 
+                  user={user} 
+                  isDarkMode={isDarkMode} 
+                  onOpenAddExpense={openAddExpense} 
+                />
+              </div>
+              )}
+              {activeTab === 'services' && <Services user={user} isDarkMode={isDarkMode} onAdd={() => { setModalType('service'); setModalShowTabs(false); setIsModalOpen(true); }} />}
+              {activeTab === 'clients' && <Clients user={user} isDarkMode={isDarkMode} onAdd={() => { setModalType('client'); setModalShowTabs(false); setIsModalOpen(true); }} />}
+              {activeTab === 'settings' && <SettingsScreen user={user} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} />}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
 
       <NewRecordModal 
-        isOpen={isModalOpen} 
+        isOpen={isModalOpen && modalType !== 'expense'} 
         onClose={() => setIsModalOpen(false)} 
-        user={user} 
-        onSave={refreshData}
-        initialType={modalType}
+        user={user}
+        initialType={modalType as any}
         showTabs={modalShowTabs}
+        onSave={() => {}}
         isDarkMode={isDarkMode}
+      />
+
+      {isModalOpen && modalType === 'expense' && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsModalOpen(false)}
+            className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-lg bg-white dark:bg-surface-dark rounded-[32px] p-8 shadow-2xl transition-colors"
+          >
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-8">Nova Despesa</h2>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Descrição</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Aluguel, Produtos..." 
+                  value={expenseDesc}
+                  onChange={e => setExpenseDesc(e.target.value)}
+                  className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Valor</label>
+                  <input 
+                    type="number" 
+                    placeholder="0.00" 
+                    value={expenseAmount}
+                    onChange={e => setExpenseAmount(e.target.value)}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Categoria</label>
+                  <select 
+                    value={expenseCategory}
+                    onChange={e => setExpenseCategory(e.target.value)}
+                    className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white"
+                  >
+                    <option value="Aluguel">Aluguel</option>
+                    <option value="Produtos">Produtos</option>
+                    <option value="Serviços">Serviços</option>
+                    <option value="Salários">Salários</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+              </div>
+              <button 
+                onClick={handleSaveExpense}
+                className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-4 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                Salvar Despesa
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      <ReceiptModal 
+        isOpen={isReceiptOpen} 
+        onClose={() => setIsReceiptOpen(false)} 
+        appointment={selectedReceipt}
+        isDarkMode={isDarkMode}
+        salonName={salonName}
+      />
+
+      <NotificationOverlay 
+        isOpen={isNotificationsOpen} 
+        onClose={() => setIsNotificationsOpen(false)} 
+        notifications={notifications}
+        onMarkRead={markNotificationRead}
       />
     </div>
   );
 }
+
+export default App;
