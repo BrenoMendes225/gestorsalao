@@ -1264,42 +1264,106 @@ const SettingsScreen = ({
 };
 
 const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user: User, isDarkMode: boolean, refreshKey: number, onEdit: (apt: Appointment) => void, onStatusUpdate: () => void }) => {
-  const [filter, setFilter] = useState('Confirmados');
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [filter, setFilter] = useState('Pendentes');
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const tabs = ['Pendentes', 'Finalizados', 'Cancelados'];
 
-  useEffect(() => {
+  // Detail popup state
+  const [selectedApt, setSelectedApt] = useState<any>(null);
+
+  // Edit modal state
+  const [editingApt, setEditingApt] = useState<any>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editServiceId, setEditServiceId] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  const loadData = () => {
     supabase
       .from('appointments')
-      .select('*, client:client_id(name), service:service_id(name, price)')
-      .order('time')
+      .select('*, client:client_id(name, phone), service:service_id(name, price, duration)')
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
       .then(({ data }) => {
         if (data) {
-          setAppointments(data.map(apt => ({
+          setAppointments(data.map((apt: any) => ({
             ...apt,
-            client_name: (apt.client as any)?.name,
-            service_name: (apt.service as any)?.name,
-            service_price: (apt.service as any)?.price
+            client_name: apt.client?.name,
+            client_phone: apt.client?.phone,
+            service_name: apt.service?.name,
+            service_price: apt.service?.price,
           })));
         }
       });
-  }, [refreshKey]);
+    supabase.from('services').select('*').eq('user_id', user.id).then(({ data }) => setServices(data || []));
+  };
+
+  useEffect(() => { loadData(); }, [refreshKey]);
 
   const updateAptStatus = async (id: string, status: string) => {
     const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
     if (!error) {
-      setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
+      setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+      setSelectedApt(null);
       onStatusUpdate();
     }
+  };
+
+  const handleOpenEdit = (apt: any) => {
+    setEditingApt(apt);
+    setEditDate(apt.date || '');
+    setEditTime(apt.time || '');
+    setEditServiceId(apt.service_id?.toString() || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingApt) return;
+    setEditSaving(true);
+    const { error } = await supabase.from('appointments').update({
+      date: editDate,
+      time: editTime,
+      service_id: editServiceId || editingApt.service_id,
+    }).eq('id', editingApt.id);
+    setEditSaving(false);
+    if (!error) {
+      loadData();
+      setEditingApt(null);
+    } else {
+      alert(error.message);
+    }
+  };
+
+  const sendWhatsAppReminder = (apt: any) => {
+    const phone = apt.client_phone?.replace(/\D/g, '');
+    if (!phone) { alert('Telefone da cliente não encontrado.'); return; }
+    const dateFormatted = apt.date ? new Date(apt.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }) : apt.date;
+    const msg = encodeURIComponent(
+      `Olá ${apt.client_name}! 🌸\n\nPassando para lembrar do seu agendamento:\n\n📋 *Serviço:* ${apt.service_name}\n📅 *Data:* ${dateFormatted}\n⏰ *Horário:* ${apt.time}\n💳 *Pagamento:* ${apt.payment_method || 'A combinar'}\n\nTe esperamos! Qualquer dúvida, é só chamar. 💕`
+    );
+    window.open(`https://wa.me/55${phone}?text=${msg}`, '_blank');
+  };
+
+  const filteredApts = appointments.filter(apt =>
+    (filter === 'Pendentes' && apt.status === 'pending') ||
+    (filter === 'Finalizados' && apt.status === 'completed') ||
+    (filter === 'Cancelados' && apt.status === 'cancelled')
+  );
+
+  const formatDate = (dateStr: string) => {
+    try {
+      return new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch { return dateStr; }
   };
 
   return (
     <div className="pb-24 md:pb-8">
       <header className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 md:bg-white md:dark:bg-surface-dark backdrop-blur-md rounded-t-2xl md:rounded-xl transition-colors">
         <div className="flex items-center p-4 pb-2 justify-between">
-          <button className="p-2 md:hidden text-slate-500 dark:text-slate-400"><MoreVertical size={24} /></button>
           <h2 className="text-lg md:text-2xl font-bold md:pl-4 dark:text-white">Agendamentos</h2>
-          <button className="p-2 text-slate-500 dark:text-slate-400"><Search size={24} /></button>
+          <span className="bg-primary/10 text-primary text-[10px] font-black px-3 py-1 rounded-full uppercase">
+            {filteredApts.length} agendamento{filteredApts.length !== 1 ? 's' : ''}
+          </span>
         </div>
         <div className="px-4 md:px-8 pb-3">
           <div className="flex border-b border-slate-200 dark:border-border-dark gap-6 overflow-x-auto no-scrollbar">
@@ -1312,6 +1376,11 @@ const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user
                 }`}
               >
                 {tab}
+                {tab === 'Pendentes' && (
+                  <span className="ml-2 bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                    {appointments.filter(a => a.status === 'pending').length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1319,89 +1388,283 @@ const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user
       </header>
 
       <main className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-extrabold dark:text-white">Hoje, 13 de Março</h3>
-          <span className="text-primary text-[10px] font-bold bg-primary/10 px-2 py-1 rounded-full uppercase">{appointments.length} Horários</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {appointments.filter(apt => filter === 'Todos' || (filter === 'Pendentes' && apt.status === 'pending') || (filter === 'Finalizados' && apt.status === 'completed')).map(apt => (
-            <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
-              <div className="flex items-center gap-4">
-                <div className="size-14 rounded-full border-2 border-primary/20 overflow-hidden shrink-0">
-                  <img src="/assets/client-avatar.png" alt={apt.client_name} referrerPolicy="no-referrer" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-base font-bold leading-tight line-clamp-1 dark:text-white">{apt.client_name}</p>
-                      <p className="text-primary text-xs font-bold mt-1">{apt.service_name}</p>
+        {filteredApts.length === 0 ? (
+          <div className="py-16 text-center">
+            <div className="size-20 rounded-full bg-slate-50 dark:bg-background-dark flex items-center justify-center mx-auto mb-4">
+              <Calendar className="text-slate-200 dark:text-slate-700" size={32} />
+            </div>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Nenhum agendamento {filter.toLowerCase()}.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {filteredApts.map(apt => (
+              <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
+                {/* Client info - clicking opens popup */}
+                <button
+                  className="flex items-center gap-4 text-left w-full hover:opacity-80 transition-opacity"
+                  onClick={() => setSelectedApt(apt)}
+                >
+                  <div className="size-14 rounded-full border-2 border-primary/20 overflow-hidden shrink-0">
+                    <img src="/assets/client-avatar.png" alt={apt.client_name} referrerPolicy="no-referrer" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-base font-bold leading-tight dark:text-white hover:text-primary transition-colors">{apt.client_name}</p>
+                        <p className="text-primary text-xs font-bold mt-1">{apt.service_name}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                        apt.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' :
+                        apt.status === 'cancelled' ? 'bg-rose-500/10 text-rose-500' :
+                        'bg-amber-500/10 text-amber-500'
+                      }`}>
+                        {apt.status === 'completed' ? 'Finalizado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
+                      </span>
                     </div>
-                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                      apt.status === 'completed' 
-                        ? 'bg-emerald-500/10 text-emerald-500' 
-                        : apt.status === 'cancelled'
-                        ? 'bg-rose-500/10 text-rose-500'
-                        : 'bg-amber-500/10 text-amber-500'
-                    }`}>
-                      {apt.status === 'completed' ? 'Finalizado' : apt.status === 'cancelled' ? 'Cancelado' : 'Pendente'}
-                    </span>
+                  </div>
+                </button>
+
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-50 dark:border-border-dark">
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <Calendar size={14} className="text-primary/60" />
+                    <span className="text-[11px] font-bold">{formatDate(apt.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <Clock size={14} className="text-primary/60" />
+                    <span className="text-[11px] font-bold">{apt.time}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <CreditCard size={14} className="text-primary/60" />
+                    <span className="text-[11px] font-bold">{apt.payment_method || '-'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                    <TrendingUp size={14} className="text-emerald-500/60" />
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">R$ {apt.service_price?.toFixed(2)}</span>
                   </div>
                 </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-50 dark:border-border-dark">
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <Calendar size={14} className="text-primary/60" />
-                  <span className="text-[11px] font-bold">{new Date(apt.date).toLocaleDateString('pt-BR')}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <Clock size={14} className="text-primary/60" />
-                  <span className="text-[11px] font-bold">{apt.time}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <CreditCard size={14} className="text-primary/60" />
-                  <span className="text-[11px] font-bold">{apt.payment_method}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-                  <TrendingUp size={14} className="text-emerald-500/60" />
-                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">R$ {apt.service_price}</span>
-                </div>
-              </div>
 
-              {apt.status === 'pending' && (
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    onClick={() => updateAptStatus(apt.id, 'completed')}
-                    className="flex-1 h-10 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-emerald-500/20 active:scale-95 transition-all"
+                {apt.status === 'pending' && (
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => updateAptStatus(apt.id, 'completed')}
+                      className="flex-1 h-10 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm shadow-emerald-500/20 active:scale-95 transition-all hover:bg-emerald-600"
+                    >
+                      <CheckCircle size={14} /> Finalizar
+                    </button>
+                    <button
+                      onClick={() => handleOpenEdit(apt)}
+                      className="size-10 rounded-xl bg-slate-100 dark:bg-background-dark text-slate-500 dark:text-slate-400 flex items-center justify-center active:scale-95 transition-all hover:bg-primary/10 hover:text-primary"
+                      title="Editar"
+                    >
+                      <Scissors size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Detail Popup */}
+      <AnimatePresence>
+        {selectedApt && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedApt(null)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              className="relative w-full max-w-sm bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-primary p-6 text-white flex items-center gap-4">
+                <div className="size-14 rounded-full border-2 border-white/30 overflow-hidden">
+                  <img src="/assets/client-avatar.png" alt={selectedApt.client_name} referrerPolicy="no-referrer" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-black text-lg leading-tight">{selectedApt.client_name}</p>
+                  <p className="text-white/80 text-sm">{selectedApt.service_name}</p>
+                </div>
+                <button onClick={() => setSelectedApt(null)} className="size-8 rounded-xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
+                  <Plus size={18} className="rotate-45" />
+                </button>
+              </div>
+              {/* Details */}
+              <div className="p-6 space-y-3">
+                <div className="space-y-2 text-sm">
+                  {[
+                    { icon: Calendar, label: 'Data', val: formatDate(selectedApt.date) },
+                    { icon: Clock, label: 'Horário', val: selectedApt.time },
+                    { icon: CreditCard, label: 'Pagamento', val: selectedApt.payment_method || 'Não informado' },
+                    { icon: TrendingUp, label: 'Valor', val: `R$ ${selectedApt.service_price?.toFixed(2) || '—'}` },
+                    { icon: Phone, label: 'WhatsApp', val: selectedApt.client_phone || 'Não informado' },
+                  ].map(({ icon: Icon, label, val }) => (
+                    <div key={label} className="flex justify-between items-center py-2 border-b border-slate-50 dark:border-border-dark last:border-0">
+                      <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                        <Icon size={14} />
+                        <span className="font-bold text-xs uppercase tracking-wide">{label}</span>
+                      </div>
+                      <span className="font-bold text-slate-800 dark:text-white text-sm">{val}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    onClick={() => sendWhatsAppReminder(selectedApt)}
+                    className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-green-500/20 hover:bg-[#20bd59] transition-all active:scale-[0.98]"
                   >
-                    <CheckCircle size={14} /> Finalizar
+                    <Phone size={18} /> Enviar Lembrete no WhatsApp
                   </button>
-                  <button 
-                    onClick={() => onEdit(apt)}
-                    className="size-10 rounded-xl bg-slate-100 dark:bg-background-dark text-slate-500 dark:text-slate-400 flex items-center justify-center active:scale-95 transition-all"
-                    title="Editar"
-                  >
-                    <Scissors size={14} />
+                  {selectedApt.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { handleOpenEdit(selectedApt); setSelectedApt(null); }}
+                        className="flex-1 bg-slate-100 dark:bg-background-dark text-slate-700 dark:text-slate-300 font-bold py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-border-dark transition-all text-sm"
+                      >
+                        <Scissors size={16} /> Editar
+                      </button>
+                      <button
+                        onClick={() => updateAptStatus(selectedApt.id, 'completed')}
+                        className="flex-1 bg-emerald-500 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all text-sm shadow-md shadow-emerald-500/20 active:scale-[0.98]"
+                      >
+                        <CheckCircle size={16} /> Finalizar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {editingApt && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setEditingApt(null)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 md:p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-white">Editar Agendamento</h2>
+                    <p className="text-slate-400 dark:text-slate-500 text-sm">{editingApt.client_name}</p>
+                  </div>
+                  <button onClick={() => setEditingApt(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors dark:text-slate-400">
+                    <Plus size={24} className="rotate-45" />
                   </button>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </main>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Procedimento</label>
+                    <select
+                      value={editServiceId}
+                      onChange={e => setEditServiceId(e.target.value)}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                    >
+                      {services.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} — R$ {s.price?.toFixed(2)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Data</label>
+                      <input
+                        type="date"
+                        value={editDate}
+                        onChange={e => setEditDate(e.target.value)}
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Horário</label>
+                      <input
+                        type="time"
+                        value={editTime}
+                        onChange={e => setEditTime(e.target.value)}
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={editSaving}
+                    className="w-full bg-primary text-white font-bold h-14 rounded-2xl shadow-lg shadow-primary/20 text-base disabled:opacity-50 hover:bg-primary/90 transition-all active:scale-[0.98]"
+                  >
+                    {editSaving ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
+
 
 
 const Services = ({ user, onAdd, onEdit, isDarkMode }: { user: User, onAdd: () => void, onEdit: (s: Service) => void, isDarkMode: boolean }) => {
   const [services, setServices] = useState<Service[]>([]);
   const [category, setCategory] = useState('Cabelo');
   const categories = ['Cabelo', 'Unhas', 'Estética', 'Maquiagem'];
+  
+  // Add service modal state
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newService, setNewService] = useState({ name: '', price: '', duration: '60', category: 'Cabelo' });
 
-  useEffect(() => {
+  const loadServices = () => {
     supabase.from('services').select('*').order('category').then(({ data }) => setServices(data || []));
-  }, []);
+  };
+
+  useEffect(() => { loadServices(); }, []);
+
+  const handleOpenAdd = () => {
+    setNewService({ name: '', price: '', duration: '60', category: 'Cabelo' });
+    setIsAddOpen(true);
+  };
+
+  const handleSaveService = async () => {
+    if (!newService.name || !newService.price) return;
+    setSaving(true);
+    const { error } = await supabase.from('services').insert({
+      user_id: user.id,
+      name: newService.name,
+      price: parseFloat(newService.price),
+      duration: parseInt(newService.duration) || 60,
+      category: newService.category,
+    });
+    setSaving(false);
+    if (error) { alert(error.message); return; }
+    setIsAddOpen(false);
+    loadServices();
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2500);
+  };
 
   return (
     <div className="pb-24 md:pb-8">
@@ -1412,7 +1675,7 @@ const Services = ({ user, onAdd, onEdit, isDarkMode }: { user: User, onAdd: () =
           </button>
           <h1 className="text-xl md:text-2xl font-extrabold flex-1 md:flex-none px-4 md:px-0 dark:text-white">Catálogo de Serviços</h1>
           <button 
-            onClick={onAdd}
+            onClick={handleOpenAdd}
             className="size-10 flex items-center justify-center rounded-full bg-primary text-white shadow-lg md:ml-auto md:w-auto md:px-4 md:gap-2 hover:scale-105 transition-transform"
           >
             <Plus size={20} /> <span className="hidden md:inline font-bold">Novo Serviço</span>
@@ -1479,6 +1742,105 @@ const Services = ({ user, onAdd, onEdit, isDarkMode }: { user: User, onAdd: () =
           ))}
         </div>
       </main>
+
+      {/* Add Service Modal */}
+      <AnimatePresence>
+        {isAddOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 md:p-8">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white">Novo Serviço</h2>
+                  <button onClick={() => setIsAddOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors dark:text-slate-400">
+                    <Plus size={24} className="rotate-45" />
+                  </button>
+                </div>
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Tipo de Serviço</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Designer de Sobrancelhas"
+                      value={newService.name}
+                      onChange={e => setNewService({ ...newService, name: e.target.value })}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold text-slate-900"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Categoria</label>
+                    <select
+                      value={newService.category}
+                      onChange={e => setNewService({ ...newService, category: e.target.value })}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                    >
+                      <option value="Cabelo">Cabelo</option>
+                      <option value="Unhas">Unhas</option>
+                      <option value="Estética">Estética</option>
+                      <option value="Maquiagem">Maquiagem</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Valor (R$)</label>
+                      <input
+                        type="number"
+                        placeholder="0,00"
+                        value={newService.price}
+                        onChange={e => setNewService({ ...newService, price: e.target.value })}
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">Tempo (min)</label>
+                      <input
+                        type="number"
+                        placeholder="60"
+                        value={newService.duration}
+                        onChange={e => setNewService({ ...newService, duration: e.target.value })}
+                        className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSaveService}
+                    disabled={saving || !newService.name || !newService.price}
+                    className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-2 disabled:opacity-50 hover:bg-primary/90 transition-all active:scale-[0.98]"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar Serviço'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Success Popup */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 60, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 60, scale: 0.9 }}
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-emerald-500/30 flex items-center gap-3 font-bold"
+          >
+            <CheckCircle size={22} />
+            Serviço adicionado com sucesso!
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -1486,9 +1848,39 @@ const Services = ({ user, onAdd, onEdit, isDarkMode }: { user: User, onAdd: () =
 const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, isDarkMode: boolean }) => {
   const [clients, setClients] = useState<Client[]>([]);
 
-  useEffect(() => {
+  // Add client modal state
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newClient, setNewClient] = useState({ name: '', phone: '' });
+
+  const loadClients = () => {
     supabase.from('clients').select('*').order('name').then(({ data }) => setClients(data || []));
-  }, []);
+  };
+
+  useEffect(() => { loadClients(); }, []);
+
+  const handleOpenAdd = () => {
+    setNewClient({ name: '', phone: '' });
+    setIsAddOpen(true);
+  };
+
+  const handleSaveClient = async () => {
+    if (!newClient.name || !newClient.phone) return;
+    setSaving(true);
+    const { error } = await supabase.from('clients').insert({
+      user_id: user.id,
+      name: newClient.name,
+      phone: newClient.phone,
+      status: 'active',
+    });
+    setSaving(false);
+    if (error) { alert(error.message); return; }
+    setIsAddOpen(false);
+    loadClients();
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2500);
+  };
 
   return (
     <div className="pb-24 md:pb-8">
@@ -1501,7 +1893,7 @@ const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, i
             <h1 className="text-xl md:text-2xl font-bold dark:text-white">Gestão de Clientes</h1>
           </div>
           <button 
-            onClick={onAdd}
+            onClick={handleOpenAdd}
             className="bg-primary text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 shadow-sm shadow-primary/30 hover:bg-primary/90 transition-colors hover:scale-105"
           >
             <Plus size={16} /> <span className="hidden md:inline">Nova Cliente</span><span className="md:hidden">Nova</span>
@@ -1532,7 +1924,7 @@ const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, i
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {clients.map(client => (
-            <div key={client.id} className="flex items-center gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-transparent hover:border-primary/20 hover:shadow-md transition-all cursor-pointer group transition-colors">
+            <div key={client.id} className="flex items-center gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-transparent hover:border-primary/20 hover:shadow-md transition-all cursor-pointer group">
               <div className="relative shrink-0">
                 <div className="size-16 md:size-14 rounded-full border-2 border-primary/10 overflow-hidden">
                   <img src="/assets/client-avatar.png" alt={client.name} referrerPolicy="no-referrer" />
@@ -1555,6 +1947,92 @@ const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, i
           ))}
         </div>
       </main>
+
+      {/* Add Client Modal */}
+      <AnimatePresence>
+        {isAddOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-lg bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 md:p-8">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white">Nova Cliente</h2>
+                  <button onClick={() => setIsAddOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors dark:text-slate-400">
+                    <Plus size={24} className="rotate-45" />
+                  </button>
+                </div>
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">
+                      Nome do Cliente <span className="text-primary">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Maria da Silva"
+                      value={newClient.name}
+                      onChange={e => setNewClient({ ...newClient, name: e.target.value })}
+                      className="w-full h-14 px-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold text-slate-900"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase ml-1">
+                      Número de Telefone <span className="text-primary">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="tel"
+                        placeholder="(11) 99999-9999"
+                        value={newClient.phone}
+                        onChange={e => setNewClient({ ...newClient, phone: maskPhone(e.target.value) })}
+                        className="w-full h-14 pl-12 pr-5 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-primary transition-all dark:text-white font-bold text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  {(!newClient.name || !newClient.phone) && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500 text-center">* Campos obrigatórios</p>
+                  )}
+
+                  <button
+                    onClick={handleSaveClient}
+                    disabled={saving || !newClient.name || !newClient.phone}
+                    className="w-full bg-primary text-white font-bold h-16 rounded-2xl shadow-lg shadow-primary/20 text-lg mt-2 disabled:opacity-50 hover:bg-primary/90 transition-all active:scale-[0.98]"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar Cliente'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Success Popup */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 60, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 60, scale: 0.9 }}
+            className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-white px-6 py-4 rounded-2xl shadow-2xl shadow-emerald-500/30 flex items-center gap-3 font-bold whitespace-nowrap"
+          >
+            <CheckCircle size={22} />
+            Cliente adicionada com sucesso!
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
