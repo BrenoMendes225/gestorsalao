@@ -737,7 +737,7 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
     // Fetch Completed Appointments with details
     const { data: completedApts } = await supabase
       .from('appointments')
-      .select('id, date, time, client:client_id(name), service:service_id(name, price)')
+      .select('id, date, time, created_at, client:client_id(name), service:service_id(name, price)')
       .eq('status', 'completed');
     
     // Calculate total revenue
@@ -752,6 +752,7 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
         id: exp.id,
         type: 'expense',
         date: exp.date,
+        created_at: exp.created_at,
         description: exp.description,
         amount: exp.amount,
         category: exp.category
@@ -763,14 +764,23 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
         id: apt.id,
         type: 'revenue',
         date: apt.date,
+        created_at: apt.created_at,
         description: `${apt.client?.name || 'Cliente'} - ${apt.service?.name || 'Serviço'}`,
         amount: apt.service?.price || 0,
         category: 'Atendimento'
       });
     });
     
-    // Sort by date descending
-    txs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Sort by date and then created_at descending (newest first)
+    txs.sort((a, b) => {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      // If same date, sort by created_at descending
+      if (a.created_at && b.created_at) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      return 0;
+    });
     setTransactions(txs);
     setLoading(false);
   };
@@ -780,6 +790,7 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
   }, [refreshKey]);
 
   const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+  const netBalance = revenue - totalExpenses;
 
   return (
     <div className="pb-24 p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
@@ -796,7 +807,7 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="p-8 rounded-[32px] bg-white dark:bg-surface-dark shadow-xl border border-slate-50 dark:border-border-dark flex flex-col justify-between relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-8 opacity-[0.05] dark:opacity-[0.1] transition-transform group-hover:scale-110">
             <TrendingUp size={120} className="text-emerald-500" />
@@ -820,6 +831,23 @@ const FinanceScreen = ({ user, isDarkMode, refreshKey, onOpenAddExpense }: { use
             </div>
             <p className="text-slate-400 dark:text-slate-500 font-bold text-xs uppercase tracking-widest">Total Despesas</p>
             <h3 className="text-4xl font-black text-slate-900 dark:text-white mt-1">R$ {totalExpenses.toFixed(2)}</h3>
+          </div>
+        </div>
+
+        <div className={`p-8 rounded-[32px] shadow-xl border flex flex-col justify-between relative overflow-hidden group ${
+          netBalance >= 0 
+            ? 'bg-emerald-500 border-emerald-400 text-white shadow-emerald-500/20' 
+            : 'bg-rose-500 border-rose-400 text-white shadow-rose-500/20'
+        }`}>
+          <div className="absolute top-0 right-0 p-8 opacity-[0.1] transition-transform group-hover:scale-110">
+            {netBalance >= 0 ? <TrendingUp size={120} /> : <TrendingUp size={120} className="rotate-180" />}
+          </div>
+          <div className="relative z-10">
+            <div className="size-12 rounded-2xl bg-white/20 text-white flex items-center justify-center mb-6 backdrop-blur-sm">
+              <Wallet size={24} />
+            </div>
+            <p className="text-white/80 font-bold text-xs uppercase tracking-widest">Lucro Líquido</p>
+            <h3 className="text-4xl font-black text-white mt-1">R$ {netBalance.toFixed(2)}</h3>
           </div>
         </div>
       </div>
@@ -1274,7 +1302,7 @@ const Agenda = ({ user, isDarkMode, refreshKey, onEdit, onStatusUpdate }: { user
             <div key={apt.id} className="flex flex-col gap-4 bg-white dark:bg-surface-dark p-5 rounded-2xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md">
               <div className="flex items-center gap-4">
                 <div className="size-14 rounded-full border-2 border-primary/20 overflow-hidden shrink-0">
-                  <img src={`https://picsum.photos/seed/${apt.client_name}/100/100`} alt={apt.client_name} referrerPolicy="no-referrer" />
+                  <img src="/assets/client-avatar.png" alt={apt.client_name} referrerPolicy="no-referrer" />
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
@@ -1481,7 +1509,7 @@ const Clients = ({ user, onAdd, isDarkMode }: { user: User, onAdd: () => void, i
             <div key={client.id} className="flex items-center gap-4 bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-transparent hover:border-primary/20 hover:shadow-md transition-all cursor-pointer group transition-colors">
               <div className="relative shrink-0">
                 <div className="size-16 md:size-14 rounded-full border-2 border-primary/10 overflow-hidden">
-                  <img src={`https://picsum.photos/seed/${client.name}/100/100`} alt={client.name} referrerPolicy="no-referrer" />
+                  <img src="/assets/client-avatar.png" alt={client.name} referrerPolicy="no-referrer" />
                 </div>
                 {client.status === 'active' && (
                   <span className="absolute bottom-0 right-0 size-4 md:size-3 bg-emerald-500 border-2 border-white dark:border-background-dark rounded-full"></span>
