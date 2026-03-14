@@ -26,15 +26,19 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [newExpense, setNewExpense] = useState({ description: '', amount: '', category: 'Aluguel' });
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filterType, setFilterType] = useState<'all' | 'revenue' | 'expense'>('all');
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch Revenue
+      setLoading(true);
+      // Fetch Revenue (Completed Appointments)
       const { data: apts } = await supabase
         .from('appointments')
-        .select('*, service:service_id(price)')
-        .eq('status', 'completed');
+        .select('*, client:client_id(name), service:service_id(name, price)')
+        .eq('status', 'completed')
+        .eq('user_id', user.id);
       
       const rev = apts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
       setRevenue(rev);
@@ -43,9 +47,40 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
       const { data: exp } = await supabase
         .from('expenses')
         .select('*')
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
       
       setExpenses(exp || []);
+
+      // Create Unified Transaction List
+      const unifiedTransactions = [
+        ...(apts || []).map((a: any) => ({
+          id: a.id,
+          type: 'revenue',
+          description: a.service?.name || 'Serviço',
+          subject: a.client?.name || 'Cliente',
+          amount: a.service?.price || 0,
+          date: a.date,
+          created_at: a.date // Use appointment date for sorting
+        })),
+        ...(exp || []).map((e: any) => ({
+          id: e.id,
+          type: 'expense',
+          description: e.description,
+          subject: e.category,
+          amount: e.amount,
+          date: e.date,
+          created_at: e.created_at
+        }))
+      ].sort((a, b) => {
+        // Sort by date (YYYY-MM-DD) and then by created_at time if available
+        const dateCompare = b.date.localeCompare(a.date);
+        if (dateCompare !== 0) return dateCompare;
+        return (b.created_at || '').localeCompare(a.created_at || '');
+      });
+
+      setTransactions(unifiedTransactions);
+      setLoading(false);
     };
 
     fetchData();
@@ -65,9 +100,7 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
     if (!error) {
       setNewExpense({ description: '', amount: '', category: 'Aluguel' });
       setShowAddExpense(false);
-      // Refresh expenses
-      const { data } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-      setExpenses(data || []);
+      // Trigger refresh via state or effect (already using refreshKey in parent)
     }
     setLoading(false);
   };
@@ -80,6 +113,10 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
 
   const totalExpenses = expenses.reduce((acc, exp) => acc + exp.amount, 0);
   const netProfit = revenue - totalExpenses;
+
+  const filteredTransactions = transactions.filter(trx => 
+    filterType === 'all' ? true : trx.type === filterType
+  );
 
   return (
     <div className="pb-24">
@@ -117,10 +154,29 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
       <div className="p-4 md:p-8">
         <div className="flex justify-between items-center mb-6">
           <h4 className="text-slate-900 dark:text-white font-bold flex items-center gap-2">
-            Histórico <span className="text-slate-400 dark:text-slate-500 text-xs font-medium bg-slate-100 dark:bg-background-dark px-2 py-0.5 rounded-lg">{expenses.length}</span>
+            Histórico <span className="text-slate-400 dark:text-slate-500 text-xs font-medium bg-slate-100 dark:bg-background-dark px-2 py-0.5 rounded-lg">{filteredTransactions.length}</span>
           </h4>
           <div className="flex gap-2">
-            <button className="p-2.5 bg-slate-100 dark:bg-background-dark rounded-xl text-slate-600 dark:text-slate-400 hover:text-primary transition-colors"><Filter size={18} /></button>
+            <div className="flex bg-slate-100 dark:bg-background-dark p-1 rounded-xl mr-2">
+              <button 
+                onClick={() => setFilterType('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'all' ? 'bg-white dark:bg-surface-dark text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Tudo
+              </button>
+              <button 
+                onClick={() => setFilterType('revenue')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'revenue' ? 'bg-white dark:bg-surface-dark text-emerald-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Entradas
+              </button>
+              <button 
+                onClick={() => setFilterType('expense')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'expense' ? 'bg-white dark:bg-surface-dark text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Saídas
+              </button>
+            </div>
             <button 
               onClick={() => setShowAddExpense(true)}
               className="px-4 py-2.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-700 dark:hover:bg-slate-100 transition-all active:scale-95"
@@ -131,38 +187,50 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
         </div>
 
         <div className="space-y-3">
-          {expenses.length === 0 ? (
+          {filteredTransactions.length === 0 ? (
             <div className="py-20 text-center bg-white dark:bg-surface-dark rounded-3xl border border-slate-100 dark:border-border-dark">
               <div className="size-16 bg-slate-50 dark:bg-background-dark rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                 <Wallet size={32} />
               </div>
-              <p className="text-slate-500 font-bold">Nenhuma despesa registrada.</p>
+              <p className="text-slate-500 font-bold">Nenhuma transação encontrada.</p>
             </div>
           ) : (
-            expenses.map((exp) => (
+            filteredTransactions.map((trx) => (
               <motion.div 
-                key={exp.id} 
+                key={trx.id} 
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-center justify-between p-4 bg-white dark:bg-surface-dark rounded-2xl border border-slate-50 dark:border-border-dark shadow-sm hover:shadow-md transition-all group"
               >
                 <div className="flex items-center gap-4">
-                  <div className={`size-10 rounded-xl flex items-center justify-center ${exp.amount > 100 ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                    <TrendingDown size={18} />
+                  <div className={`size-10 rounded-xl flex items-center justify-center ${trx.type === 'revenue' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                    {trx.type === 'revenue' ? (
+                      <TrendingUp size={18} />
+                    ) : (
+                      <TrendingDown size={18} />
+                    )}
                   </div>
                   <div>
-                    <p className="text-slate-900 dark:text-white font-bold text-sm">{exp.description}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{exp.category} • {formatDate(exp.date)}</p>
+                    <p className="text-slate-900 dark:text-white font-bold text-sm">
+                      {trx.description}
+                    </p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                      {trx.subject} • {formatDate(trx.date)}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <p className="text-rose-500 font-black text-sm">- R$ {exp.amount.toFixed(2)}</p>
-                  <button 
-                    onClick={() => deleteExpense(exp.id)}
-                    className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <p className={`font-black text-sm ${trx.type === 'revenue' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {trx.type === 'revenue' ? '+' : '-'} R$ {trx.amount.toFixed(2)}
+                  </p>
+                  {trx.type === 'expense' && (
+                    <button 
+                      onClick={() => deleteExpense(trx.id)}
+                      className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))

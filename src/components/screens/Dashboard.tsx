@@ -46,18 +46,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
 
-      // Fetch Revenue (Confirmed Appointments)
+      // Fetch Revenue (Confirmed Appointments) - specific to this user
       const { data: confirmedApts } = await supabase
         .from('appointments')
         .select('*, service:service_id(price)')
-        .eq('status', 'completed');
+        .eq('status', 'completed')
+        .eq('user_id', user.id);
       
       const revenue = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
       
-      // Fetch Expenses
+      // Fetch Expenses - specific to this user
       const { data: expData } = await supabase
         .from('expenses')
-        .select('amount');
+        .select('amount')
+        .eq('user_id', user.id);
       
       const expenses = expData?.reduce((acc, exp) => acc + exp.amount, 0) || 0;
 
@@ -65,9 +67,14 @@ const Dashboard: React.FC<DashboardProps> = ({
       const { data: aptsToday } = await supabase
         .from('appointments')
         .select('*, client:client_id(name), service:service_id(name, price)')
-        .eq('date', today);
+        .eq('date', today)
+        .eq('user_id', user.id)
+        .order('time', { ascending: true });
       
-      const { data: totalCl } = await supabase.from('clients').select('*');
+      const { data: totalCl } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('user_id', user.id);
 
       setStats({
         revenue,
@@ -96,12 +103,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         .from('appointments')
         .select('date, service:service_id(price)')
         .eq('status', 'completed')
+        .eq('user_id', user.id)
         .gte('date', startDateStr);
       
       // Fetch expenses for the same period
       const { data: weeklyExpenses } = await supabase
         .from('expenses')
         .select('date, amount')
+        .eq('user_id', user.id)
         .gte('date', startDateStr);
       
       const chartValues = Array(7).fill(0);
