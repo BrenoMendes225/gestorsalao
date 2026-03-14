@@ -29,6 +29,7 @@ interface NewRecordModalProps {
   isDarkMode: boolean;
   editingAppointment?: Appointment | null;
   editingService?: Service | null;
+  editingClient?: Client | null;
 }
 
 const NewRecordModal: React.FC<NewRecordModalProps> = ({ 
@@ -40,10 +41,11 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
   showTabs = true,
   isDarkMode,
   editingAppointment,
-  editingService
+  editingService,
+  editingClient
 }) => {
   const [type, setType] = useState<'appointment' | 'client' | 'service'>(
-    editingAppointment ? 'appointment' : (editingService ? 'service' : initialType)
+    editingAppointment ? 'appointment' : (editingService ? 'service' : (editingClient ? 'client' : initialType))
   );
   const [loading, setLoading] = useState(false);
   
@@ -59,7 +61,10 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
   const [clients, setClients] = useState<Client[]>([]);
 
   // Client form
-  const [newClient, setNewClient] = useState({ name: '', phone: '', email: '' });
+  const [newClient, setNewClient] = useState({ 
+    name: editingClient?.name || '', 
+    phone: editingClient?.phone || '' 
+  });
   
   // Service form
   const [newService, setNewService] = useState({ 
@@ -86,6 +91,12 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
           duration: editingService.duration.toString(),
           category: editingService.category
         });
+      } else if (editingClient) {
+        setType('client');
+        setNewClient({
+          name: editingClient.name,
+          phone: editingClient.phone || ''
+        });
       } else {
         setType(initialType);
         setPaymentMethod('Dinheiro');
@@ -93,11 +104,12 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
         setServiceId('');
         setDate(new Date().toISOString().split('T')[0]);
         setTime('10:00');
+        setNewClient({ name: '', phone: '' });
       }
       supabase.from('services').select('*').eq('user_id', user.id).then(({ data }) => setServices(data || []));
       supabase.from('clients').select('*').eq('user_id', user.id).order('name').then(({ data }) => setClients(data || []));
     }
-  }, [isOpen, initialType, editingAppointment, editingService, user]);
+  }, [isOpen, initialType, editingAppointment, editingService, editingClient, user]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -148,8 +160,14 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
         return;
       } else if (type === 'client') {
         if (!newClient.name || !newClient.phone) throw new Error("Nome e telefone são obrigatórios.");
-        const { error } = await supabase.from('clients').insert({ ...newClient, user_id: user.id });
-        if (error) throw error;
+        
+        if (editingClient) {
+          const { error } = await supabase.from('clients').update(newClient).eq('id', editingClient.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('clients').insert({ ...newClient, user_id: user.id });
+          if (error) throw error;
+        }
       } else if (type === 'service') {
         if (!newService.name || !newService.price) throw new Error("Nome e preço são obrigatórios.");
         const serviceData = { 
@@ -199,7 +217,9 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
       >
         <div className="p-6 md:p-8 flex justify-between items-center bg-white dark:bg-surface-dark z-10">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white">
-            {type === 'appointment' ? 'Novo Agendamento' : type === 'client' ? 'Nova Cliente' : 'Novo Serviço'}
+            {type === 'appointment' ? (editingAppointment ? 'Editar Agendamento' : 'Novo Agendamento') : 
+             type === 'client' ? (editingClient ? 'Editar Cliente' : 'Nova Cliente') : 
+             (editingService ? 'Editar Serviço' : 'Novo Serviço')}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-background-dark rounded-xl transition-colors dark:text-slate-400">
             <Plus size={24} className="rotate-45" />

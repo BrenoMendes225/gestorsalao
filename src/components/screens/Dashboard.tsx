@@ -13,6 +13,7 @@ import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { Appointment, DashboardStats } from '../../types';
 import { User } from '@supabase/supabase-js';
+import { formatDate, formatTime } from '../../utils/format';
 
 interface DashboardProps {
   user: User;
@@ -251,7 +252,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               className="flex flex-col md:flex-row md:items-center gap-4 p-4 bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-border-dark shadow-sm transition-all hover:shadow-md cursor-pointer group active:scale-[0.98]"
             >
               <div className="flex items-center md:flex-col md:justify-center min-w-[50px] md:border-r border-slate-100 dark:border-border-dark md:pr-4 gap-4 md:gap-0">
-                <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg group-hover:text-primary transition-colors">{apt.time}</p>
+                <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg group-hover:text-primary transition-colors">{formatTime(apt.time)}</p>
                 <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase hidden md:block">Hoje</p>
               </div>
               <div className="flex-1 border-t border-slate-50 dark:border-border-dark pt-3 md:border-0 md:pt-0">

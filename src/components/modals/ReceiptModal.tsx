@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Appointment } from '../../types';
+import { formatDate, formatTime } from '../../utils/format';
 
 interface ReceiptModalProps {
   isOpen: boolean;
@@ -21,15 +22,6 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
   salonName
 }) => {
   if (!appointment) return null;
-
-  const formatDate = (dateStr: string) => {
-    try {
-      const [year, month, day] = dateStr.split('-');
-      return `${day}/${month}/${year}`;
-    } catch {
-      return dateStr;
-    }
-  };
 
   const formattedDate = formatDate(appointment.date);
 
@@ -101,7 +93,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({
                   <div>
                     <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Serviço</label>
                     <p className="text-base font-bold text-slate-700 dark:text-slate-300">{appointment.service_name}</p>
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{appointment.date} • {appointment.time}</p>
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">{formatDate(appointment.date)} • {formatTime(appointment.time)}</p>
                   </div>
                   <div className="text-right">
                     <label className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-600 block mb-1">Valor</label>

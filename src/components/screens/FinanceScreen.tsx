@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { Expense } from '../../types';
 import { User } from '@supabase/supabase-js';
+import { formatDate } from '../../utils/format';
 
 interface FinanceScreenProps {
   user: User;
@@ -151,7 +152,7 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
                   </div>
                   <div>
                     <p className="text-slate-900 dark:text-white font-bold text-sm">{exp.description}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{exp.category} • {exp.date}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{exp.category} • {formatDate(exp.date)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">

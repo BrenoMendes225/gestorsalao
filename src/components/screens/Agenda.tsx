@@ -12,11 +12,14 @@ import {
   ChevronRight, 
   ExternalLink,
   Phone,
-  Plus
+  Plus,
+  Check,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { Appointment } from '../../types';
+import { formatDate, formatTime } from '../../utils/format';
 
 interface AgendaProps {
   userId: string;
@@ -31,6 +34,9 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
+  const [cancellationReason, setCancellationReason] = useState('');
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -39,8 +45,7 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
         .from('appointments')
         .select('*, client:client_id(name, phone), service:service_id(name, price)')
         .eq('status', activeStatus)
-        .order('date', { ascending: true })
-        .order('time', { ascending: true });
+        .order('created_at', { ascending: false });
       
       if (error) {
         console.error("Error fetching appointments:", error);
@@ -59,10 +64,15 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
     fetchAppointments();
   }, [activeStatus, userId, refreshKey]);
 
-  const updateStatus = async (id: string, status: 'completed' | 'cancelled') => {
-    await supabase.from('appointments').update({ status }).eq('id', id);
+  const updateStatus = async (id: string, status: 'completed' | 'cancelled', reason?: string) => {
+    const updateData: any = { status };
+    if (reason !== undefined) updateData.cancellation_reason = reason;
+    
+    await supabase.from('appointments').update(updateData).eq('id', id);
     setAppointments(appointments.filter(a => a.id !== id));
-    if (selectedAppointment?.id === id) setSelectedAppointment(null);
+    if (selectedAppointment?.id === id) {
+      setSelectedAppointment(prev => prev ? { ...prev, status, cancellation_reason: reason } : null);
+    }
   };
 
   const deleteAppointment = async (id: string) => {
@@ -78,8 +88,22 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
       alert('Telefone do cliente não encontrado.');
       return;
     }
-    const message = `Olá ${apt.client_name}, lembrete do seu agendamento de ${apt.service_name} dia ${apt.date} às ${apt.time}. Confirmado?`;
+    const message = `Olá ${apt.client_name}, lembrete do seu agendamento de ${apt.service_name} dia ${formatDate(apt.date)} às ${formatTime(apt.time)}. Confirmado?`;
     window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  const handleCancelClick = (e: React.MouseEvent, apt: Appointment) => {
+    e.stopPropagation();
+    setAppointmentToCancel(apt);
+    setCancellationReason('');
+    setIsCancelModalOpen(true);
+  };
+
+  const confirmCancellation = async () => {
+    if (!appointmentToCancel) return;
+    await updateStatus(appointmentToCancel.id, 'cancelled', cancellationReason);
+    setIsCancelModalOpen(false);
+    setAppointmentToCancel(null);
   };
 
   const filteredApts = appointments.filter(apt => 
@@ -174,8 +198,14 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
               >
                 <div className="flex justify-between items-start">
                   <div className="flex gap-4">
-                    <div className="size-10 rounded-xl bg-primary/10 flex flex-col items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
-                      <Clock size={18} />
+                    <div className={`size-10 rounded-xl flex flex-col items-center justify-center transition-all ${
+                      apt.status === 'pending' ? 'bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white' :
+                      apt.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' :
+                      'bg-rose-500/10 text-rose-500'
+                    }`}>
+                      {apt.status === 'pending' ? <Clock size={18} /> :
+                       apt.status === 'completed' ? <Check size={18} /> :
+                       <X size={18} />}
                     </div>
                     <div>
                       <h4 className="text-slate-900 dark:text-white font-bold text-base leading-tight group-hover:text-primary transition-colors">{apt.service_name}</h4>
@@ -187,15 +217,15 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                   </div>
                   <div className="text-right">
                     <p className="text-slate-900 dark:text-white font-black text-base">R$ {apt.price?.toFixed(2)}</p>
-                    <p className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 mt-1">{apt.time}</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 mt-1">{formatTime(apt.time)}</p>
                   </div>
                 </div>
                 
                 {activeStatus === 'pending' && (
-                  <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50 dark:border-border-dark opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50 dark:border-border-dark transition-opacity">
                     <button 
                       onClick={(e) => { e.stopPropagation(); updateStatus(apt.id, 'completed'); }}
-                      className="flex-1 h-9 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition-colors"
+                      className="flex-[1.5] h-9 bg-emerald-500 text-white rounded-lg text-xs font-bold hover:bg-emerald-600 transition-colors"
                     >
                       Finalizar
                     </button>
@@ -204,6 +234,12 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                       className="flex-1 h-9 bg-slate-100 dark:bg-background-dark text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                     >
                       Editar
+                    </button>
+                    <button 
+                      onClick={(e) => handleCancelClick(e, apt)}
+                      className="flex-1 h-9 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all"
+                    >
+                      Cancelar
                     </button>
                     <button 
                       onClick={(e) => { e.stopPropagation(); sendReminder(apt); }}
@@ -242,9 +278,11 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                     <Scissors size={28} />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { onEditApt(selectedAppointment); setSelectedAppointment(null); }} className="p-3 bg-slate-50 dark:bg-background-dark rounded-xl text-slate-500 dark:text-slate-400 hover:text-primary transition-colors">
-                      <Edit3 size={20} />
-                    </button>
+                    {selectedAppointment.status === 'pending' && (
+                      <button onClick={() => { onEditApt(selectedAppointment); setSelectedAppointment(null); }} className="p-3 bg-slate-50 dark:bg-background-dark rounded-xl text-slate-500 dark:text-slate-400 hover:text-primary transition-colors">
+                        <Edit3 size={20} />
+                      </button>
+                    )}
                     <button onClick={() => deleteAppointment(selectedAppointment.id)} className="p-3 bg-rose-50 dark:bg-rose-500/10 text-rose-500 rounded-xl hover:bg-rose-500 hover:text-white transition-colors">
                       <Trash2 size={20} />
                     </button>
@@ -255,7 +293,7 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                   <div>
                     <h3 className="text-2xl font-black text-slate-900 dark:text-white">{selectedAppointment.service_name}</h3>
                     <p className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-2 mt-1 uppercase text-xs tracking-widest">
-                      R$ {selectedAppointment.price?.toFixed(2)} • {selectedAppointment.time}
+                      R$ {selectedAppointment.price?.toFixed(2)} • {formatTime(selectedAppointment.time)}
                     </p>
                   </div>
 
@@ -270,28 +308,37 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                           <p className="text-slate-800 dark:text-white font-bold">{selectedAppointment.client_name}</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => sendReminder(selectedAppointment)}
-                        className="p-2.5 bg-primary text-white rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-                      >
-                        <Phone size={18} />
-                      </button>
+                      {selectedAppointment.status === 'pending' && (
+                        <button 
+                          onClick={() => sendReminder(selectedAppointment)}
+                          className="p-2.5 bg-primary text-white rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                        >
+                          <Phone size={18} />
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {selectedAppointment.status === 'cancelled' && selectedAppointment.cancellation_reason && (
+                    <div className="p-5 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-100 dark:border-rose-500/20">
+                      <p className="text-[10px] font-black uppercase text-rose-500 tracking-tighter mb-1">Motivo do Cancelamento</p>
+                      <p className="text-slate-700 dark:text-rose-100 font-medium italic">"{selectedAppointment.cancellation_reason}"</p>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 border border-slate-100 dark:border-border-dark rounded-2xl flex items-center gap-3">
                       <Calendar size={18} className="text-primary" />
                       <div>
                         <p className="text-[9px] font-black uppercase text-slate-400">Data</p>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{selectedAppointment.date}</p>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{formatDate(selectedAppointment.date)}</p>
                       </div>
                     </div>
                     <div className="p-4 border border-slate-100 dark:border-border-dark rounded-2xl flex items-center gap-3">
                       <Clock size={18} className="text-primary" />
                       <div>
                         <p className="text-[9px] font-black uppercase text-slate-400">Horário</p>
-                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{selectedAppointment.time}</p>
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{formatTime(selectedAppointment.time)}</p>
                       </div>
                     </div>
                   </div>
@@ -313,6 +360,55 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey
                     </button>
                   )}
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Cancellation Reason Modal */}
+      <AnimatePresence>
+        {isCancelModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCancelModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-surface-dark p-8 rounded-[40px] shadow-2xl text-center"
+            >
+              <div className="size-20 bg-rose-500 rounded-3xl flex items-center justify-center text-white mx-auto mb-8 shadow-xl shadow-rose-500/30">
+                <Trash2 size={32} />
+              </div>
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-4">Cancelar Agendamento?</h2>
+              <p className="text-slate-500 dark:text-slate-400 font-bold mb-8">Por que você está cancelando este atendimento? (Opcional)</p>
+              
+              <textarea 
+                placeholder="Ex: Cliente não compareceu, mudou de ideia..." 
+                value={cancellationReason}
+                onChange={e => setCancellationReason(e.target.value)}
+                className="w-full h-32 p-6 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark outline-none focus:border-rose-500 transition-all dark:text-white font-medium mb-8 resize-none"
+              />
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setIsCancelModalOpen(false)}
+                  className="flex-1 h-16 bg-slate-100 dark:bg-background-dark text-slate-500 dark:text-slate-400 rounded-2xl font-black transition-all"
+                >
+                  Voltar
+                </button>
+                <button 
+                  onClick={confirmCancellation}
+                  className="flex-[2] h-16 bg-rose-500 text-white rounded-2xl font-black text-lg shadow-xl shadow-rose-500/20 hover:scale-105 transition-all"
+                >
+                  Continuar
+                </button>
               </div>
             </motion.div>
           </div>

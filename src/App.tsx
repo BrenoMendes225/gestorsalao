@@ -2,7 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Lock } from 'lucide-react';
 import { supabase } from './lib/supabase';
-import { Appointment, Service, Notification as AppNotification } from './types';
+import { Appointment, Service, Client, Notification as AppNotification } from './types';
 import { User } from '@supabase/supabase-js';
 
 // Layout & Modals
@@ -40,6 +40,7 @@ function App() {
   const [newRecordInitialType, setNewRecordInitialType] = useState<'appointment' | 'client' | 'service'>('appointment');
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [newRecordShowTabs, setNewRecordShowTabs] = useState(true);
   
   const [selectedAppointmentForReceipt, setSelectedAppointmentForReceipt] = useState<Appointment | null>(null);
@@ -89,12 +90,21 @@ function App() {
   const handleEditApt = (apt: Appointment) => {
     setEditingAppointment(apt);
     setNewRecordInitialType('appointment');
+    setNewRecordShowTabs(false);
     setIsNewRecordOpen(true);
   };
 
   const handleEditService = (service: Service) => {
     setEditingService(service);
     setNewRecordInitialType('service');
+    setNewRecordShowTabs(false);
+    setIsNewRecordOpen(true);
+  };
+
+  const handleEditClient = (client: Client) => {
+    setEditingClient(client);
+    setNewRecordInitialType('client');
+    setNewRecordShowTabs(false);
     setIsNewRecordOpen(true);
   };
 
@@ -168,10 +178,12 @@ function App() {
           <Clients 
             userId={user.id} 
             onAdd={() => {
+              setEditingClient(null);
               setNewRecordInitialType('client');
               setNewRecordShowTabs(false);
               setIsNewRecordOpen(true);
             }} 
+            onEdit={handleEditClient}
             refreshKey={refreshKey} 
           />
         );
@@ -226,6 +238,8 @@ function App() {
             setIsNewRecordOpen(false);
             setEditingAppointment(null);
             setEditingService(null);
+            setEditingClient(null);
+            setNewRecordShowTabs(true);
           }}
           user={user}
           onSave={triggerRefresh}
@@ -234,6 +248,7 @@ function App() {
           isDarkMode={isDarkMode}
           editingAppointment={editingAppointment}
           editingService={editingService}
+          editingClient={editingClient}
         />
         
         <ReceiptModal 

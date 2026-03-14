@@ -2,33 +2,118 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   Users, 
-  Settings2, 
+  Edit3, 
   UserPlus, 
   Phone, 
   Calendar, 
   Star,
-  MoreHorizontal
+  Trash2,
+  Clock,
+  X,
+  Check,
+  ChevronRight
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
-import { Client } from '../../types';
+import { Client, Appointment } from '../../types';
+import { formatDate, formatTime } from '../../utils/format';
 
 interface ClientsProps {
   userId: string;
   onAdd: () => void;
+  onEdit: (client: Client) => void;
   refreshKey: number;
 }
 
-const Clients: React.FC<ClientsProps> = ({ onAdd, refreshKey }) => {
+const Clients: React.FC<ClientsProps> = ({ onAdd, onEdit, refreshKey }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<Client | null>(null);
+  const [clientHistory, setClientHistory] = useState<Appointment[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchClients = async () => {
+    setLoading(true);
+    const { data: clientsData, error: clientsError } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (clientsError) {
+      console.error("Error fetching clients:", clientsError);
+      setLoading(false);
+      return;
+    }
+
+    if (clientsData && clientsData.length > 0) {
+      // Fetch last visits
+      const { data: visitsData } = await supabase
+        .from('appointments')
+        .select('client_id, date')
+        .in('client_id', clientsData.map(c => c.id))
+        .eq('status', 'completed')
+        .order('date', { ascending: false });
+
+      const lastVisitMap: Record<string, string> = {};
+      visitsData?.forEach(v => {
+        if (!lastVisitMap[v.client_id]) lastVisitMap[v.client_id] = v.date;
+      });
+
+      setClients(clientsData.map(c => ({
+        ...c,
+        last_visit: lastVisitMap[c.id] || null
+      })));
+    } else {
+      setClients([]);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    supabase.from('clients').select('*').order('name').then(({ data }) => {
-      setClients(data || []);
-    });
+    fetchClients();
   }, [refreshKey]);
+
+  const deleteClient = async (id: string, name: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a cliente "${name}"? Esta ação não pode ser desfeita.`)) return;
+    
+    setLoading(true);
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    
+    if (error) {
+      if (error.code === '23503') {
+        alert("Não é possível excluir esta cliente pois ela possui agendamentos registrados.");
+      } else {
+        alert("Erro ao excluir cliente: " + error.message);
+      }
+    } else {
+      fetchClients();
+    }
+    setLoading(false);
+  };
+
+  const fetchHistory = async (client: Client) => {
+    setSelectedClientForHistory(client);
+    setHistoryLoading(true);
+    
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*, service:service_id(name, price)')
+      .eq('client_id', client.id)
+      .order('date', { ascending: false })
+      .order('time', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching history:", error);
+    } else {
+      setClientHistory(data.map((a: any) => ({
+        ...a,
+        service_name: a.service?.name,
+        price: a.service?.price
+      })));
+    }
+    setHistoryLoading(false);
+  };
 
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -58,66 +143,174 @@ const Clients: React.FC<ClientsProps> = ({ onAdd, refreshKey }) => {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredClients.map((client, i) => (
-            <motion.div 
-              key={client.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.03 }}
-              className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-slate-100 dark:border-border-dark shadow-sm hover:shadow-md transition-all group relative overflow-hidden"
-            >
-              <button className="absolute top-4 right-4 p-2 text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors">
-                <MoreHorizontal size={20} />
-              </button>
-
-              <div className="flex items-center gap-4 mb-6">
-                <div className="size-16 rounded-2xl bg-slate-50 dark:bg-background-dark border border-slate-100 dark:border-border-dark flex items-center justify-center text-slate-300 overflow-hidden relative group-hover:border-primary/50 transition-colors">
-                  <Users size={32} />
-                  {client.is_vip && (
-                    <div className="absolute top-0 right-0 bg-amber-500 p-0.5 rounded-bl-lg">
-                      <Star size={10} fill="white" className="text-white" />
+        {loading && clients.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="size-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-slate-400 font-bold text-sm">Carregando clientes...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredClients.map((client, i) => (
+              <motion.div 
+                key={client.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.03 }}
+                className="bg-white dark:bg-surface-dark p-6 rounded-3xl border border-slate-100 dark:border-border-dark shadow-sm hover:shadow-md transition-all group relative overflow-hidden flex flex-col"
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="size-16 rounded-2xl bg-primary/5 dark:bg-primary/10 border border-primary/10 flex items-center justify-center text-primary overflow-hidden relative group-hover:bg-primary group-hover:text-white transition-all">
+                    <Users size={32} />
+                    {client.is_vip && (
+                      <div className="absolute top-0 right-0 bg-amber-500 p-0.5 rounded-bl-lg">
+                        <Star size={10} fill="white" className="text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-black text-slate-900 dark:text-white group-hover:text-primary transition-colors">{client.name}</h4>
+                    <div className="flex items-center gap-1.5 text-slate-400">
+                      <Phone size={12} />
+                      <span className="text-xs font-bold">{client.phone || '(Sempre)'}</span>
                     </div>
-                  )}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-lg font-black text-slate-900 dark:text-white group-hover:text-primary transition-colors">{client.name}</h4>
-                  <div className="flex items-center gap-1.5 text-slate-400">
-                    <Phone size={12} />
-                    <span className="text-xs font-bold">{client.phone || '(Sempre)'}</span>
+
+                <div className="grid grid-cols-2 gap-2 mt-auto">
+                  <div className="bg-slate-50 dark:bg-background-dark p-3 rounded-xl border border-slate-100 dark:border-border-dark">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Última Visita</p>
+                    <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                      <Calendar size={12} className="text-primary" />
+                      <span className="text-xs font-bold">{formatDate(client.last_visit)}</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-background-dark p-3 rounded-xl border border-slate-100 dark:border-border-dark">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Status</p>
+                    <div className="flex items-center gap-1.5">
+                      <div className={`size-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 capitalize">{client.status}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-50 dark:border-border-dark flex gap-2">
+                  <button 
+                    onClick={() => fetchHistory(client)}
+                    className="flex-1 h-10 bg-primary/10 text-primary rounded-xl text-xs font-black hover:bg-primary hover:text-white transition-all uppercase tracking-tighter"
+                  >
+                    Ver Histórico
+                  </button>
+                  <button 
+                    onClick={() => deleteClient(client.id, client.name)}
+                    className="h-10 w-10 flex items-center justify-center bg-rose-50 dark:bg-rose-500/10 text-rose-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-xl transition-all"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => onEdit(client)}
+                    className="h-10 w-10 flex items-center justify-center bg-slate-50 dark:bg-background-dark text-slate-400 rounded-xl hover:text-primary transition-colors"
+                  >
+                    <Edit3 size={16} />
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* History Modal */}
+      <AnimatePresence>
+        {selectedClientForHistory && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedClientForHistory(null)}
+              className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white dark:bg-surface-dark rounded-[32px] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="p-8 border-b border-slate-100 dark:border-border-dark bg-slate-50/50 dark:bg-background-dark/50">
+                <div className="flex items-center gap-4">
+                  <div className="size-12 rounded-2xl bg-primary text-white flex items-center justify-center">
+                    <Users size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white">{selectedClientForHistory.name}</h3>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{selectedClientForHistory.phone || 'Sem telefone'}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-auto">
-                <div className="bg-slate-50 dark:bg-background-dark p-3 rounded-xl border border-slate-100 dark:border-border-dark">
-                  <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Última Visita</p>
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                    <Calendar size={12} className="text-primary" />
-                    <span className="text-xs font-bold">{client.last_visit || '--/--/--'}</span>
+              <div className="p-6 overflow-y-auto flex-1">
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Histórico de Atendimentos</h4>
+                
+                {historyLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="size-8 border-3 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-xs text-slate-400 font-bold uppercase">Buscando histórico...</p>
                   </div>
-                </div>
-                <div className="bg-slate-50 dark:bg-background-dark p-3 rounded-xl border border-slate-100 dark:border-border-dark">
-                  <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Status</p>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`size-1.5 rounded-full ${client.status === 'active' ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
-                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 capitalize">{client.status}</span>
+                ) : clientHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="size-12 bg-slate-50 dark:bg-background-dark rounded-full flex items-center justify-center mx-auto mb-3 text-slate-300">
+                      <Calendar size={20} />
+                    </div>
+                    <p className="text-sm font-bold text-slate-500 italic">Nenhum atendimento registrado.</p>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    {clientHistory.map((apt) => (
+                      <div key={apt.id} className="p-4 rounded-2xl border border-slate-100 dark:border-border-dark bg-white dark:bg-surface-dark shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <h5 className="font-black text-slate-900 dark:text-white">{apt.service_name}</h5>
+                          <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${
+                            apt.status === 'completed' ? 'bg-emerald-100 text-emerald-600' :
+                            apt.status === 'pending' ? 'bg-blue-100 text-blue-600' :
+                            apt.status === 'cancelled' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {apt.status === 'completed' ? 'Finalizado' :
+                             apt.status === 'pending' ? 'Pendente' :
+                             apt.status === 'cancelled' ? 'Cancelado' : apt.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={14} className="text-primary" />
+                            {formatDate(apt.date)}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={14} className="text-primary" />
+                            {formatTime(apt.time)}
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-slate-50 dark:border-border-dark flex justify-between items-center text-xs">
+                          <span className="text-slate-400 uppercase font-black tracking-tighter">Valor</span>
+                          <span className="text-slate-900 dark:text-white font-black">R$ {apt.price?.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-50 dark:border-border-dark flex gap-2">
-                <button className="flex-1 h-10 bg-primary/10 text-primary rounded-xl text-xs font-black hover:bg-primary hover:text-white transition-all uppercase tracking-tighter">
-                  Ver Histórico
-                </button>
-                <button className="h-10 w-10 flex items-center justify-center bg-slate-50 dark:bg-background-dark text-slate-400 rounded-xl hover:text-primary transition-colors">
-                  <Settings2 size={16} />
+              <div className="p-6 bg-slate-50 dark:bg-background-dark">
+                <button 
+                  onClick={() => setSelectedClientForHistory(null)}
+                  className="w-full h-14 bg-white dark:bg-surface-dark text-slate-600 dark:text-slate-300 font-black rounded-2xl border border-slate-200 dark:border-border-dark shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-all uppercase tracking-widest text-sm"
+                >
+                  Fechar
                 </button>
               </div>
             </motion.div>
-          ))}
-        </div>
-      </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
