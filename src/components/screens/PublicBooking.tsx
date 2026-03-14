@@ -131,7 +131,7 @@ const PublicBooking: React.FC = () => {
       if (existingClient) {
         clientId = existingClient.id;
       } else {
-        const { data: newClient } = await supabase
+        const { data: newClient, error: clientErr } = await supabase
           .from('clients')
           .insert({ 
             name: clientInfo.name, 
@@ -141,6 +141,8 @@ const PublicBooking: React.FC = () => {
           })
           .select()
           .single();
+        
+        if (clientErr || !newClient) throw new Error(clientErr?.message || 'Falha ao cadastrar cliente.');
         clientId = newClient.id;
       }
 

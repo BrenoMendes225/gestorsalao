@@ -104,12 +104,14 @@ function App() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications(prev => [payload.new as AppNotification, ...prev]);
+          if (!payload.new) return;
+          const newNotif = payload.new as AppNotification;
+          setNotifications(prev => [newNotif, ...prev]);
           
           // Browser Notification
           if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(payload.new.title, {
-              body: payload.new.message,
+            new Notification(newNotif.title, {
+              body: newNotif.message,
             });
           }
         }
