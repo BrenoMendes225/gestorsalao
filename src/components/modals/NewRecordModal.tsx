@@ -119,8 +119,8 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
 
         if (editingAppointment) {
           const { error } = await supabase.from('appointments').update({
-            client_id: parseInt(cid),
-            service_id: parseInt(serviceId),
+            client_id: cid,
+            service_id: serviceId,
             date,
             time,
             payment_method: paymentMethod
@@ -129,8 +129,8 @@ const NewRecordModal: React.FC<NewRecordModalProps> = ({
         } else {
           const { error } = await supabase.from('appointments').insert({
             user_id: user.id,
-            client_id: parseInt(cid),
-            service_id: parseInt(serviceId),
+            client_id: cid,
+            service_id: serviceId,
             date,
             time,
             status: 'pending',

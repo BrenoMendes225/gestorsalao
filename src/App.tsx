@@ -134,7 +134,19 @@ function App() {
           />
         );
       case 'agenda':
-        return <Agenda userId={user.id} onEditApt={handleEditApt} refreshKey={refreshKey} />;
+        return (
+          <Agenda 
+            userId={user.id} 
+            onEditApt={handleEditApt} 
+            onAddApt={() => {
+              setEditingAppointment(null);
+              setNewRecordInitialType('appointment');
+              setNewRecordShowTabs(false);
+              setIsNewRecordOpen(true);
+            }}
+            refreshKey={refreshKey} 
+          />
+        );
       case 'finances':
         return <FinanceScreen user={user} isDarkMode={isDarkMode} refreshKey={refreshKey} />;
       case 'services':

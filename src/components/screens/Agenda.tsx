@@ -11,7 +11,8 @@ import {
   Edit3, 
   ChevronRight, 
   ExternalLink,
-  Phone
+  Phone,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -20,10 +21,11 @@ import { Appointment } from '../../types';
 interface AgendaProps {
   userId: string;
   onEditApt: (apt: Appointment) => void;
+  onAddApt: () => void;
   refreshKey: number;
 }
 
-const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, refreshKey }) => {
+const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, onAddApt, refreshKey }) => {
   const [activeStatus, setActiveStatus] = useState<'pending' | 'completed' | 'cancelled'>('pending');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,13 +59,13 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, refreshKey }) => {
     fetchAppointments();
   }, [activeStatus, userId, refreshKey]);
 
-  const updateStatus = async (id: number, status: 'completed' | 'cancelled') => {
+  const updateStatus = async (id: string, status: 'completed' | 'cancelled') => {
     await supabase.from('appointments').update({ status }).eq('id', id);
     setAppointments(appointments.filter(a => a.id !== id));
     if (selectedAppointment?.id === id) setSelectedAppointment(null);
   };
 
-  const deleteAppointment = async (id: number) => {
+  const deleteAppointment = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
     await supabase.from('appointments').delete().eq('id', id);
     setAppointments(appointments.filter(a => a.id !== id));
@@ -102,7 +104,16 @@ const Agenda: React.FC<AgendaProps> = ({ userId, onEditApt, refreshKey }) => {
     <div className="pb-24">
       {/* Header & Tabs */}
       <div className="bg-white dark:bg-surface-dark p-6 transition-colors border-b border-slate-200 dark:border-border-dark sticky top-0 z-40">
-        <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-6">Agenda</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">Agenda</h2>
+          <button 
+            onClick={onAddApt}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+          >
+            <Plus size={18} />
+            <span>Novo Agendamento</span>
+          </button>
+        </div>
         
         <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-background-dark rounded-2xl mb-6">
           {[

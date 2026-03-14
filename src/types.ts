@@ -1,5 +1,5 @@
 export interface Client {
-  id: number;
+  id: string;
   name: string;
   email?: string;
   phone?: string;
@@ -9,7 +9,7 @@ export interface Client {
 }
 
 export interface Service {
-  id: number;
+  id: string;
   name: string;
   category: string;
   duration: number;
@@ -18,9 +18,9 @@ export interface Service {
 }
 
 export interface Appointment {
-  id: number;
-  client_id: number;
-  service_id: number;
+  id: string;
+  client_id: string;
+  service_id: string;
   date: string;
   time: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
