@@ -29,6 +29,7 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'revenue' | 'expense'>('all');
+  const [showFilterOptions, setShowFilterOptions] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -152,36 +153,54 @@ const FinanceScreen: React.FC<FinanceScreenProps> = ({ user, refreshKey }) => {
       </div>
 
       <div className="p-4 md:p-8">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
           <h4 className="text-slate-900 dark:text-white font-bold flex items-center gap-2">
             Histórico <span className="text-slate-400 dark:text-slate-500 text-xs font-medium bg-slate-100 dark:bg-background-dark px-2 py-0.5 rounded-lg">{filteredTransactions.length}</span>
           </h4>
-          <div className="flex gap-2">
-            <div className="flex bg-slate-100 dark:bg-background-dark p-1 rounded-xl mr-2">
-              <button 
-                onClick={() => setFilterType('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'all' ? 'bg-white dark:bg-surface-dark text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Tudo
-              </button>
-              <button 
-                onClick={() => setFilterType('revenue')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'revenue' ? 'bg-white dark:bg-surface-dark text-emerald-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Entradas
-              </button>
-              <button 
-                onClick={() => setFilterType('expense')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'expense' ? 'bg-white dark:bg-surface-dark text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Saídas
-              </button>
-            </div>
+          <div className="flex items-center gap-2 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 scrollbar-hide">
+            <AnimatePresence mode="wait">
+              {showFilterOptions && (
+                <motion.div 
+                  initial={{ opacity: 0, x: 20, width: 0 }}
+                  animate={{ opacity: 1, x: 0, width: 'auto' }}
+                  exit={{ opacity: 0, x: 20, width: 0 }}
+                  className="flex bg-slate-100 dark:bg-background-dark p-1 rounded-xl overflow-hidden whitespace-nowrap shrink-0"
+                >
+                  <button 
+                    onClick={() => setFilterType('all')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'all' ? 'bg-white dark:bg-surface-dark text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Tudo
+                  </button>
+                  <button 
+                    onClick={() => setFilterType('revenue')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'revenue' ? 'bg-white dark:bg-surface-dark text-emerald-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Entradas
+                  </button>
+                  <button 
+                    onClick={() => setFilterType('expense')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filterType === 'expense' ? 'bg-white dark:bg-surface-dark text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Saídas
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            
+            <button 
+              onClick={() => setShowFilterOptions(!showFilterOptions)}
+              className={`p-2.5 rounded-xl transition-all shrink-0 ${showFilterOptions ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-100 dark:bg-background-dark text-slate-600 dark:text-slate-400 hover:text-primary'}`}
+            >
+              <Filter size={18} />
+            </button>
+
             <button 
               onClick={() => setShowAddExpense(true)}
-              className="px-4 py-2.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-700 dark:hover:bg-slate-100 transition-all active:scale-95"
+              className="px-4 py-2.5 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-slate-700 dark:hover:bg-slate-100 transition-all active:scale-95 shrink-0"
             >
-              <Plus size={16} /> Nova Despesa
+              <Plus size={16} /> 
+              <span className="hidden sm:inline">Nova Despesa</span>
             </button>
           </div>
         </div>
