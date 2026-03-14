@@ -20,9 +20,45 @@ import { Service } from '../../types';
 const maskPhone = (value: string) => {
   if (!value) return "";
   value = value.replace(/\D/g, "");
-  value = value.replace(/^(\d{2})(\d)/g, "$1 $2");
-  value = value.replace(/(\d{5})(\d)/, "$1-$2");
-  return value.slice(0, 15);
+  if (value.length <= 10) {
+    // (99) 9999-9999
+    value = value.replace(/^(\d{2})(\d)/g, "($1) $2");
+    value = value.replace(/(\d{4})(\d)/, "$1-$2");
+  } else {
+    // (99) 9 9999-9999
+    value = value.replace(/^(\d{2})(\d)/g, "($1) $2");
+    value = value.replace(/(\d{1})(\d{4})(\d)/, "$2 $3-$4"); // This was wrong in previous logic
+    // Refined mask for 11 digits
+    value = value.replace(/^(\d{2})(\d{1})(\d{4})(\d{4})$/, "($1) $2 $3-$4");
+  }
+  return value.slice(0, 16);
+};
+
+// Simplified mask that works for both
+const applyPhoneMask = (v: string) => {
+  v = v.replace(/\D/g, "");
+  if (v.length > 11) v = v.slice(0, 11);
+  if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+  if (v.length > 9) { // (99) 9 9999-9999
+    v = `${v.slice(0, 9)}-${v.slice(9)}`;
+  } else if (v.length > 4) { // (99) 9999
+    v = `${v.slice(0, 10)}`; // just wait for more digits or fallback
+  }
+  return v;
+};
+
+// Let's use a more robust one
+const robustMask = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length <= 10) {
+    return digits
+      .replace(/(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{4})(\d)/, "$1-$2")
+      .slice(0, 14);
+  }
+  return digits
+    .replace(/(\d{2})(\d{1})(\d{4})(\d)/, "($1) $2 $3-$4")
+    .slice(0, 16);
 };
 
 const PublicBooking: React.FC = () => {
@@ -122,6 +158,25 @@ const PublicBooking: React.FC = () => {
       });
 
       if (error) throw error;
+
+      // 3. Notificar o dono do salão
+      if (ownerId) {
+        await supabase.from('notifications').insert({
+          user_id: ownerId,
+          title: 'Novo Agendamento! 📅',
+          message: `${clientInfo.name} agendou ${selectedService?.name} para o dia ${selectedDate} às ${selectedTime}`,
+          read: false
+        });
+
+        // Browser Notification (Opcional - Tentativa)
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Novo Agendamento!", {
+            body: `${clientInfo.name} agendou para ${selectedDate} às ${selectedTime}`,
+            icon: '/path-to-your-icon.png' // Idealmente o ícone do app
+          });
+        }
+      }
+
       setConfirmed(true);
     } catch (err: any) {
       alert(err.message);
@@ -349,7 +404,7 @@ const PublicBooking: React.FC = () => {
                       <input 
                         placeholder="(00) 0 0000-0000" 
                         value={clientInfo.phone}
-                        onChange={e => setClientInfo({...clientInfo, phone: maskPhone(e.target.value)})}
+                        onChange={e => setClientInfo({...clientInfo, phone: robustMask(e.target.value)})}
                         className="w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-primary transition-all font-bold"
                       />
                     </div>
@@ -383,7 +438,7 @@ const PublicBooking: React.FC = () => {
               </div>
 
               <button 
-                disabled={!clientInfo.name || clientInfo.phone.length < 14 || loading}
+                disabled={!clientInfo.name || clientInfo.phone.length < 13 || loading}
                 onClick={handleBooking}
                 className="w-full h-16 bg-primary text-white rounded-3xl font-black shadow-xl shadow-primary/20 disabled:opacity-50 hover:bg-primary/90 transition-all"
               >

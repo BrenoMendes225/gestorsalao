@@ -71,6 +71,56 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch and Listen for Notifications
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchNotifications = async () => {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (data) setNotifications(data);
+    };
+
+    fetchNotifications();
+
+    // Browser Notification Permission
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          setNotifications(prev => [payload.new as AppNotification, ...prev]);
+          
+          // Browser Notification
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(payload.new.title, {
+              body: payload.new.message,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
 
   useEffect(() => {
     if (isDarkMode) {
@@ -263,7 +313,10 @@ function App() {
           isOpen={isNotificationsOpen}
           onClose={() => setIsNotificationsOpen(false)}
           notifications={notifications}
-          onMarkRead={(id) => setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n))}
+          onMarkRead={async (id) => {
+            setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+            await supabase.from('notifications').update({ read: true }).eq('id', id);
+          }}
         />
 
         {/* Password Reset Modal */}

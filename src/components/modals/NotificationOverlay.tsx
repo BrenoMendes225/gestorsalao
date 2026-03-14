@@ -46,7 +46,11 @@ const NotificationOverlay: React.FC<NotificationOverlayProps> = ({
                   <div 
                     key={n.id} 
                     onClick={() => onMarkRead(n.id)}
-                    className={`p-4 border-b border-slate-50 dark:border-border-dark cursor-pointer transition-colors ${!n.read ? 'bg-primary/5 dark:bg-primary/10' : 'hover:bg-slate-50 dark:hover:bg-background-dark'}`}
+                    className={`p-4 border-b border-slate-50 dark:border-border-dark cursor-pointer transition-all ${
+                      !n.read 
+                        ? 'bg-primary/5 dark:bg-primary/10 border-l-4 border-l-primary' 
+                        : 'opacity-40 hover:opacity-100 hover:bg-slate-50 dark:hover:bg-background-dark grayscale-[0.5] hover:grayscale-0'
+                    }`}
                   >
                     <div className="flex gap-3">
                       <div className={`size-2 rounded-full mt-2 shrink-0 ${!n.read ? 'bg-primary' : 'bg-transparent'}`}></div>
