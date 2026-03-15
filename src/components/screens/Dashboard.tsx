@@ -7,11 +7,13 @@ import {
   UserCircle,
   Users,
   Wallet,
-  FileText
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
-import { Appointment, DashboardStats } from '../../types';
+import { Appointment } from '../../types';
 import { User } from '@supabase/supabase-js';
 import { formatDate, formatTime } from '../../utils/format';
 
@@ -31,120 +33,68 @@ const Dashboard: React.FC<DashboardProps> = ({
   onOpenNotifications, 
   unreadCount 
 }) => {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [profile, setProfile] = useState<any>(null);
-  const [chartData, setChartData] = useState<{ labels: string[], values: number[], rawValues: number[] }>({
-    labels: ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'],
-    values: [0, 0, 0, 0, 0, 0, 0],
-    rawValues: [0, 0, 0, 0, 0, 0, 0]
-  });
+  const [viewDate, setViewDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bookedDates, setBookedDates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const fetchData = async () => {
-      // Fetch Profile
+    const fetchProfile = async () => {
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       setProfile(prof);
+    };
 
-      // Fetch Revenue (Confirmed Appointments) - specific to this user
-      const { data: confirmedApts } = await supabase
-        .from('appointments')
-        .select('*, service:service_id(price)')
-        .eq('status', 'completed')
-        .eq('user_id', user.id);
-      
-      const revenue = confirmedApts?.reduce((acc, apt: any) => acc + (apt.service?.price || 0), 0) || 0;
-      
-      // Fetch Expenses - specific to this user
-      const { data: expData } = await supabase
-        .from('expenses')
-        .select('amount')
-        .eq('user_id', user.id);
-      
-      const expenses = expData?.reduce((acc, exp) => acc + exp.amount, 0) || 0;
+    fetchProfile();
+  }, [user.id, refreshKey]);
 
-      const today = new Date().toISOString().split('T')[0];
-      const { data: aptsToday } = await supabase
+  useEffect(() => {
+    const fetchAppointmentsForSelectedDate = async () => {
+      const { data: apts } = await supabase
         .from('appointments')
         .select('*, client:client_id(name), service:service_id(name, price)')
-        .eq('date', today)
+        .eq('date', selectedDate)
         .eq('user_id', user.id)
+        .eq('status', 'pending')
         .order('time', { ascending: true });
-      
-      const { data: totalCl } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', user.id);
 
-      setStats({
-        revenue,
-        expenses,
-        appointmentsToday: aptsToday?.length || 0,
-        totalClients: totalCl?.length || 0
-      });
-
-      if (aptsToday) {
-        setAppointments(aptsToday.map((a: any) => ({
+      if (apts) {
+        setAppointments(apts.map((a: any) => ({
           ...a,
           client_name: a.client?.name,
           service_name: a.service?.name,
           price: a.service?.price
         })));
+      } else {
+        setAppointments([]);
       }
-
-      // Fetch Weekly Performance Data (Last 7 days)
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 6);
-      startDate.setHours(0, 0, 0, 0);
-      const startDateStr = startDate.toISOString().split('T')[0];
-
-      // Fetch completed appointments for revenue
-      const { data: weeklyApts } = await supabase
-        .from('appointments')
-        .select('date, service:service_id(price)')
-        .eq('status', 'completed')
-        .eq('user_id', user.id)
-        .gte('date', startDateStr);
-      
-      // Fetch expenses for the same period
-      const { data: weeklyExpenses } = await supabase
-        .from('expenses')
-        .select('date, amount')
-        .eq('user_id', user.id)
-        .gte('date', startDateStr);
-      
-      const chartValues = Array(7).fill(0);
-      const daysAbbr = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
-      const chartLabels: string[] = [];
-
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(startDate);
-        d.setDate(d.getDate() + i);
-        const dStr = d.toISOString().split('T')[0];
-        chartLabels.push(daysAbbr[d.getDay()]);
-        
-        const dayRevenue = weeklyApts?.filter(a => a.date === dStr)
-          .reduce((sum, a: any) => sum + (a.service?.price || 0), 0) || 0;
-        
-        const dayExpense = weeklyExpenses?.filter(e => e.date === dStr)
-          .reduce((sum, e) => sum + e.amount, 0) || 0;
-        
-        // Net Profit for the day
-        chartValues[i] = dayRevenue - dayExpense;
-      }
-      
-      const maxVal = Math.max(...chartValues.map(Math.abs), 1);
-      setChartData({
-        labels: chartLabels,
-        values: chartValues.map(v => (v / maxVal) * 100),
-        rawValues: chartValues
-      });
     };
 
-    fetchData();
-  }, [user.id, refreshKey]);
+    fetchAppointmentsForSelectedDate();
+  }, [selectedDate, user.id, refreshKey]);
 
-  const netProfit = (stats?.revenue || 0) - (stats?.expenses || 0);
+  useEffect(() => {
+    const fetchBookedDates = async () => {
+      const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).toISOString().split('T')[0];
+      const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      const { data } = await supabase
+        .from('appointments')
+        .select('date')
+        .eq('user_id', user.id)
+        .gte('date', startOfMonth)
+        .lte('date', endOfMonth)
+        .eq('status', 'pending');
+
+      if (data) {
+        const dates = new Set(data.map(a => a.date));
+        setBookedDates(dates);
+      }
+    };
+
+    fetchBookedDates();
+  }, [viewDate, user.id, refreshKey]);
+
 
   const container = {
     hidden: { opacity: 0 },
@@ -161,13 +111,71 @@ const Dashboard: React.FC<DashboardProps> = ({
     show: { opacity: 1, y: 0 }
   };
 
+  // Calendar Helpers
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+  const firstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay();
+  const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+  const changeMonth = (offset: number) => {
+    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + offset, 1));
+  };
+
+  const renderCalendar = () => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const totalDays = daysInMonth(year, month);
+    const startDay = firstDayOfMonth(year, month);
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Adjust for Monday start if needed, but here we use Sunday start for simplicity (0-6)
+    // or we can adjust to make S (Mon) first. Let's stick to conventional Sun start for now
+    // and label accordingly.
+    
+    const days = [];
+    // Padding
+    for (let i = 0; i < startDay; i++) {
+      days.push(<div key={`empty-${i}`} className="h-10"></div>);
+    }
+    // Month days
+    for (let d = 1; d <= totalDays; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isToday = dateStr === todayStr;
+      const isBooked = bookedDates.has(dateStr);
+      const isSelected = dateStr === selectedDate;
+
+      days.push(
+        <div 
+          key={d} 
+          onClick={() => setSelectedDate(dateStr)}
+          className="flex flex-col items-center justify-center h-10 relative cursor-pointer group/day"
+        >
+          <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+            isSelected ? 'bg-primary text-white shadow-lg shadow-primary/30 ring-2 ring-primary ring-offset-2 dark:ring-offset-surface-dark' :
+            isToday ? 'bg-primary/20 text-primary' : 
+            isBooked ? 'text-primary' : 
+            'text-slate-600 dark:text-slate-400'
+          } group-hover/day:scale-110`}>
+            {d}
+          </div>
+          {isBooked && !isSelected && (
+            <div className="absolute bottom-0 size-1 bg-primary rounded-full"></div>
+          )}
+        </div>
+      );
+    }
+    return days;
+  };
+
+  const isSelectedToday = selectedDate === new Date().toISOString().split('T')[0];
+
   return (
     <div className="pb-24">
       {/* Top Bar */}
       <div className="flex items-center bg-white dark:bg-surface-dark p-4 pb-2 justify-between border-b border-slate-200 dark:border-border-dark transition-colors">
         <div className="flex items-center">
           <div className="size-10 rounded-full border-2 border-primary overflow-hidden bg-slate-100 dark:bg-background-dark flex items-center justify-center">
-            {profile?.avatar_url ? (
+          {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="Avatar" referrerPolicy="no-referrer" />
             ) : (
               <UserCircle className="text-slate-400 dark:text-slate-500" size={32} />
@@ -192,67 +200,49 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <motion.div 
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="p-4 md:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6"
-      >
-        {[
-          { label: 'Lucro Líquido', value: `R$ ${netProfit.toFixed(2)}`, icon: Wallet, trend: 'Net', isPrimary: true },
-          { label: 'Faturamento', value: `R$ ${stats?.revenue.toFixed(2) || '0.00'}`, icon: TrendingUp, trend: 'Bruto' },
-          { label: 'Hoje na Agenda', value: `${stats?.appointmentsToday} Serviços`, icon: Calendar, trend: 'Próximos' },
-          { label: 'Clientes Ativos', value: stats?.totalClients, icon: Users, trend: 'Base total' },
-        ].map((statItem, i) => (
-          <motion.div 
-            key={i} 
-            variants={item}
-            className={`p-5 rounded-xl shadow-sm border transition-all hover:-translate-y-1 ${statItem.isPrimary ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' : 'bg-white dark:bg-surface-dark border-slate-100 dark:border-border-dark'}`}
-          >
-            <div className={`flex items-center gap-2 mb-1 ${statItem.isPrimary ? 'text-white/80' : 'text-primary'}`}>
-              <statItem.icon size={18} />
-              <p className={`text-sm font-medium ${statItem.isPrimary ? 'text-white/80' : 'text-slate-600 dark:text-slate-400'}`}>{statItem.label}</p>
-            </div>
-            <h3 className={`text-xl md:text-2xl font-extrabold leading-none truncate ${statItem.isPrimary ? 'text-white' : 'text-slate-900 dark:text-white'}`}>{statItem.value}</h3>
-            <div className="flex items-center gap-1 mt-1">
-              <p className={`text-[10px] font-bold uppercase tracking-wider ${statItem.isPrimary ? 'text-white/60' : 'text-slate-400 dark:text-slate-500'}`}>{statItem.trend}</p>
-            </div>
-          </motion.div>
-        ))}
-      </motion.div>
 
-      {/* Chart Placeholder */}
+      {/* Calendar Section */}
       <motion.div animate={{ opacity: 1, scale: 1 }} initial={{ opacity: 0, scale: 0.95 }} className="px-4 py-2">
         <div className="bg-white dark:bg-surface-dark p-5 rounded-xl shadow-sm border border-slate-100 dark:border-border-dark transition-colors">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-slate-900 dark:text-white text-base font-bold">Desempenho Semanal</h3>
-            <span className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase">Últimos 7 dias</span>
+            <h3 className="text-slate-900 dark:text-white text-base font-bold">Calendário de Agendamentos</h3>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => changeMonth(-1)}
+                className="p-1.5 hover:bg-slate-50 dark:hover:bg-background-dark rounded-lg transition-colors text-slate-400 dark:text-slate-500"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <span className="text-slate-900 dark:text-white text-sm font-black min-w-[120px] text-center uppercase tracking-tighter">
+                {monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}
+              </span>
+              <button 
+                onClick={() => changeMonth(1)}
+                className="p-1.5 hover:bg-slate-50 dark:hover:bg-background-dark rounded-lg transition-colors text-slate-400 dark:text-slate-500"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
           </div>
-          <div className="flex items-end justify-between h-32 px-1">
-            {chartData.values.map((height, i) => (
-              <div key={i} className="flex flex-col items-center gap-2 flex-1 group/bar relative">
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[8px] px-1.5 py-0.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity whitespace-nowrap z-10 font-bold">
-                  R$ {chartData.rawValues[i].toFixed(2)}
-                </div>
-                <motion.div 
-                  initial={{ height: 0 }}
-                  animate={{ height: `${Math.max(Math.abs(height), 5)}%` }}
-                  transition={{ duration: 0.8, delay: i * 0.1 }}
-                  className={`w-full max-w-[12px] rounded-t-full ${chartData.rawValues[i] > 0 ? 'bg-primary' : chartData.rawValues[i] < 0 ? 'bg-rose-500' : 'bg-slate-100 dark:bg-background-dark'}`} 
-                ></motion.div>
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
-                  {chartData.labels[i]}
-                </span>
+          
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+              <div key={d} className="text-center text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 py-2">
+                {d}
               </div>
             ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {renderCalendar()}
           </div>
         </div>
       </motion.div>
 
       {/* Appointments List */}
       <div className="px-4 md:px-8 pt-6 pb-2 flex justify-between items-center">
-        <h2 className="text-slate-900 dark:text-white text-lg md:text-xl font-bold">Próximos de Hoje</h2>
+        <h2 className="text-slate-900 dark:text-white text-lg md:text-xl font-bold">
+          {isSelectedToday ? 'Próximos de Hoje' : `Agenda de ${formatDate(selectedDate)}`}
+        </h2>
         <button className="text-primary text-sm font-bold hover:underline transition-colors">Ver todos</button>
       </div>
       <motion.div 
@@ -263,10 +253,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       >
         {appointments.length === 0 ? (
           <div className="py-8 text-center text-slate-400 bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-border-dark">
-            Nenhum agendamento para hoje.
+            Não há atendimentos até o momento.
           </div>
         ) : (
-          appointments.slice(0, 3).map((apt) => (
+          appointments.map((apt) => (
             <motion.div 
               key={apt.id} 
               variants={item}
@@ -275,7 +265,9 @@ const Dashboard: React.FC<DashboardProps> = ({
             >
               <div className="flex items-center md:flex-col md:justify-center min-w-[50px] md:border-r border-slate-100 dark:border-border-dark md:pr-4 gap-4 md:gap-0">
                 <p className="text-slate-900 dark:text-white font-bold text-base md:text-lg group-hover:text-primary transition-colors">{formatTime(apt.time)}</p>
-                <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase hidden md:block">Hoje</p>
+                <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase hidden md:block">
+                  {isSelectedToday ? 'Hoje' : formatDate(selectedDate).split('/')[0] + '/' + formatDate(selectedDate).split('/')[1]}
+                </p>
               </div>
               <div className="flex-1 border-t border-slate-50 dark:border-border-dark pt-3 md:border-0 md:pt-0">
                 <p className="text-slate-900 dark:text-white font-bold text-sm md:text-base group-hover:text-primary transition-colors">{apt.service_name}</p>

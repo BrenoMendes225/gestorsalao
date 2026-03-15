@@ -26,6 +26,18 @@ interface SettingsScreenProps {
   salonName: string;
 }
 
+const Switch: React.FC<{ active: boolean; onChange: () => void }> = ({ active, onChange }) => (
+  <button 
+    onClick={(e) => {
+      e.stopPropagation();
+      onChange();
+    }}
+    className={`w-12 h-6 rounded-full relative transition-all duration-300 ${active ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'}`}
+  >
+    <div className={`absolute top-1 size-4 bg-white rounded-full transition-all duration-300 ${active ? 'left-7' : 'left-1'}`}></div>
+  </button>
+);
+
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ 
   user, 
   isDarkMode, 
@@ -36,11 +48,18 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(localStorage.getItem('biometric_enabled') === 'true');
+  const [notificationsEnabled, setNotificationsEnabled] = useState(localStorage.getItem('notifications_enabled') !== 'false');
 
   const toggleBiometric = () => {
     const newValue = !biometricEnabled;
     setBiometricEnabled(newValue);
     localStorage.setItem('biometric_enabled', String(newValue));
+  };
+
+  const toggleNotifications = () => {
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabled(newValue);
+    localStorage.setItem('notifications_enabled', String(newValue));
   };
 
   useEffect(() => {
@@ -101,9 +120,9 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
     {
       title: 'App',
       items: [
-        { id: 'theme', label: 'Modo Escuro', value: isDarkMode ? 'Ativado' : 'Desativado', icon: isDarkMode ? Moon : Sun, action: toggleDarkMode },
-        { id: 'biometric', label: 'Face ID / Biometria', value: biometricEnabled ? 'Ativado' : 'Desativado', icon: Shield, action: toggleBiometric },
-        { id: 'notifs', label: 'Notificações', value: 'Ativado', icon: Bell },
+        { id: 'theme', label: 'Modo Escuro', value: isDarkMode ? 'Ativado' : 'Desativado', icon: isDarkMode ? Moon : Sun, action: toggleDarkMode, type: 'toggle', active: isDarkMode },
+        { id: 'biometric', label: 'Face ID / Biometria', value: biometricEnabled ? 'Ativado' : 'Desativado', icon: Shield, action: toggleBiometric, type: 'toggle', active: biometricEnabled },
+        { id: 'notifs', label: 'Notificações', value: notificationsEnabled ? 'Ativado' : 'Desativado', icon: Bell, action: toggleNotifications, type: 'toggle', active: notificationsEnabled },
       ]
     }
   ];
@@ -156,8 +175,14 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="text-slate-700 dark:text-slate-200 font-bold text-sm">{item.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-400 dark:text-slate-500">{item.value}</span>
-                      <ChevronRight size={16} className="text-slate-300" />
+                      {item.type === 'toggle' ? (
+                        <Switch active={item.active || false} onChange={item.action || (() => {})} />
+                      ) : (
+                        <>
+                          <span className="text-xs font-bold text-slate-400 dark:text-slate-500">{item.value}</span>
+                          <ChevronRight size={16} className="text-slate-300" />
+                        </>
+                      )}
                     </div>
                   </button>
                 ))}

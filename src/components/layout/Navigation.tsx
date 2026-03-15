@@ -25,7 +25,7 @@ const Navigation: React.FC<NavigationProps> = ({
   toggleDarkMode 
 }) => {
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'dashboard', label: 'Inicio', icon: LayoutDashboard },
     { id: 'agenda', label: 'Agenda', icon: Calendar },
     { id: 'finances', label: 'Finanças', icon: Wallet },
     { id: 'services', label: 'Serviços', icon: Scissors },
@@ -55,7 +55,9 @@ const Navigation: React.FC<NavigationProps> = ({
       <nav className="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white dark:bg-surface-dark border-r border-slate-200 dark:border-border-dark flex-col z-50 transition-colors">
         <div className="p-6 flex items-center justify-between border-b border-slate-100 dark:border-border-dark">
           <div className="flex items-center gap-3">
-            <div className="bg-primary p-2 rounded-xl text-white shadow-lg shadow-primary/20"><Scissors size={24} /></div>
+            <div className="bg-white p-1 rounded-xl shadow-lg shadow-primary/20 overflow-hidden border border-slate-100 dark:border-border-dark flex items-center justify-center size-10">
+              <img src="/logo.png" alt="Beleza & Gestão" className="size-full object-cover" />
+            </div>
             <h1 className="text-xl font-extrabold tracking-tight dark:text-white">Beleza & Gestão</h1>
           </div>
           <button 
